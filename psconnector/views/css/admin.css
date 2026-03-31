@@ -1,0 +1,105 @@
+/* 
+ * PrestaShift Connector Modern UI - Overhead Header Fix
+ */
+
+#psconnector-app {
+    max-width: 1000px !important;
+    margin: 0 auto !important;
+}
+
+#psconnector-app .psc-main-panel {
+    background: #fff !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+    border-radius: 12px !important;
+    padding: 60px !important;
+    /* Massive padding for "air" */
+    margin-bottom: 24px !important;
+}
+
+#psconnector-app .ps-text-center {
+    text-align: center !important;
+}
+
+#psconnector-app .psc-input {
+    flex: 1 !important;
+    height: 48px !important;
+    padding: 0 16px !important;
+    border-radius: 8px !important;
+    border: 1px solid #e2e8f0 !important;
+    background: #f3f3f5 !important;
+    /* Match PrestaShift gray #f3f3f5 */
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace !important;
+    font-size: 14px !important;
+    color: #0f172a !important;
+}
+
+#psconnector-app .psc-btn,
+#psconnector-app button.psc-btn,
+#psconnector-app .psc-btn-primary,
+#psconnector-app .psc-btn-outline {
+    height: 44px !important;
+    padding: 0 24px !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+    font-size: 14px !important;
+    cursor: pointer !important;
+    transition: all 0.2s !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    text-decoration: none !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    line-height: normal !important;
+    border: 1px solid transparent !important;
+    outline: none !important;
+}
+
+#psconnector-app .psc-btn-primary,
+#psconnector-app button.psc-btn-primary,
+#psconnector-app .psc-main-form button[name="resetToken"],
+#psconnector-app .psc-main-form input[type="submit"],
+#psconnector-app .psc-main-form button.psc-btn-primary {
+    background-color: #0f172a !important;
+    background-image: none !important;
+    color: #ffffff !important;
+    border: 1px solid #0f172a !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+}
+
+#psconnector-app .psc-btn-primary:hover,
+#psconnector-app button.psc-btn-primary:hover {
+    background-color: #1e293b !important;
+    color: #ffffff !important;
+    border-color: #1e293b !important;
+}
+
+#psconnector-app .psc-btn-outline,
+#psconnector-app button.psc-btn-outline {
+    background-color: #ffffff !important;
+    background-image: none !important;
+    border: 1px solid #e2e8f0 !important;
+    color: #64748b !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+}
+
+#psconnector-app .psc-btn-outline:hover,
+#psconnector-app button.psc-btn-outline:hover {
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+}
+
+#psconnector-app .psc-alert-info {
+    background: #eff6ff !important;
+    border: 1px solid #bfdbfe !important;
+    color: #1e40af !important;
+    padding: 20px !important;
+    border-radius: 10px !important;
+}

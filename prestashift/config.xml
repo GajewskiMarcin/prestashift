@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<module>
+    <name>prestashift</name>
+    <displayName><![CDATA[PrestaShift Migration]]></displayName>
+    <version><![CDATA[1.0.0]]></version>
+    <description><![CDATA[Professional data migration tool for your PrestaShop. Migrate data with ease.]]></description>
+    <author><![CDATA[marcingajewski.pl]]></author>
+    <tab><![CDATA[administration]]></tab>
+    <is_configurable>1</is_configurable>
+    <need_instance>0</need_instance>
+    <limited_countries></limited_countries>
+</module>

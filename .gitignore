@@ -1,0 +1,17 @@
+.DS_Store
+Thumbs.db
+
+# Temp/build files
+*.ps1
+*.csv
+*.json
+!prestashift/config.xml
+!psconnector/config.xml
+prestashift/dictionary_subset.json
+prestashift/master_phrases.json
+prestashift/phrase_map.*
+prestashift/scan_results.*
+prestashift/final_phrases.txt
+prestashift/apply_translations_v2.php
+prestashift/rebuild_translations.php
+prestashift/translations/_extracted_phrases.txt
