@@ -444,6 +444,12 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $config['bridge_token'] = Tools::getValue('bridge_token');
         }
 
+        // Status mapping is sent as separate POST field, merge into options
+        $statusMap = Tools::getValue('status_map', []);
+        if (!empty($statusMap)) {
+            $config['options']['status_map'] = $statusMap;
+        }
+
         try {
             // 2. Cleanup if requested
             if (!empty($config['options']['clean_target'])) {
