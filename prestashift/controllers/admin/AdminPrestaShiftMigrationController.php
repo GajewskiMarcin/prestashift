@@ -537,7 +537,22 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $tasks[] = ['label' => $this->module->l('Symfony cache clear failed'), 'ok' => false, 'error' => $e->getMessage()];
         }
 
-        // 5. Refresh product indexing flags
+        // 5. Rebuild faceted search index (ps_facetedsearch / ps_layered)
+        try {
+            $facetedModule = \Module::getInstanceByName('ps_facetedsearch');
+            if ($facetedModule && method_exists($facetedModule, 'fullPricesIndexProcess')) {
+                $facetedModule->fullPricesIndexProcess(0, false, false);
+                $tasks[] = ['label' => $this->module->l('Faceted search price index rebuilt'), 'ok' => true];
+            }
+            if ($facetedModule && method_exists($facetedModule, 'rebuildLayeredStructure')) {
+                $facetedModule->rebuildLayeredStructure();
+                $tasks[] = ['label' => $this->module->l('Faceted search structure rebuilt'), 'ok' => true];
+            }
+        } catch (\Throwable $e) {
+            $tasks[] = ['label' => $this->module->l('Faceted search reindex failed'), 'ok' => false, 'error' => $e->getMessage()];
+        }
+
+        // 6. Refresh product indexing flags
         try {
             \Db::getInstance()->execute("UPDATE `" . _DB_PREFIX_ . "product` SET `indexed` = 1");
             $tasks[] = ['label' => $this->module->l('Product index flags updated'), 'ok' => true];
