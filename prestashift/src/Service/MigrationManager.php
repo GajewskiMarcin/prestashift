@@ -526,7 +526,9 @@ class MigrationManager
             
             // 14. CMS
             case 'cms':
-                $step = new Steps\CmsMigrationStep($conn, $prefix);
+                $source_url = isset($config['source_url']) ? $config['source_url'] : '';
+                $skip_files = isset($config['options']['skip_files']) && $config['options']['skip_files'];
+                $step = new Steps\CmsMigrationStep($conn, $prefix, $source_url, $skip_files);
                 $result = $step->process($offset, $limit, $lastDate);
                 $message = sprintf($this->l('Migrating CMS content (Offset: %d)...'), $offset);
                  if ($result['finished']) {

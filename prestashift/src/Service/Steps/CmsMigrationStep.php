@@ -16,11 +16,15 @@ class CmsMigrationStep
 {
     private $db_connection;
     private $prefix;
+    private $source_url;
+    private $skip_files;
 
-    public function __construct($db_connection, $prefix)
+    public function __construct($db_connection, $prefix, $source_url = '', $skip_files = false)
     {
         $this->db_connection = $db_connection;
         $this->prefix = $prefix;
+        $this->source_url = rtrim($source_url, '/');
+        $this->skip_files = $skip_files;
     }
 
     public function process($offset, $limit, $dateFilter = null)
@@ -123,5 +127,80 @@ class CmsMigrationStep
         
         // Shop
         Db::getInstance()->execute("REPLACE INTO `" . \_DB_PREFIX_ . "cms_shop` (id_cms, id_shop) VALUES ($id, " . \PrestaShift\Service\SchemaHelper::getTargetShopId() . ")");
+
+        // Download images embedded in CMS content
+        if (!$this->skip_files) {
+            foreach ($langs as $lang) {
+                $content = isset($lang['content']) ? $lang['content'] : '';
+                $this->downloadImagesFromHtml($content);
+            }
+        }
+    }
+
+    /**
+     * Parse HTML content for images and download them from source
+     */
+    private function downloadImagesFromHtml($html)
+    {
+        if (empty($html)) return;
+
+        // Match img src and background-image urls pointing to img/cms/
+        $patterns = [
+            '/src=["\'](?:https?:\/\/[^"\']*?)?(\/?)img\/cms\/([^"\']+)["\']/i',
+            '/url\(["\']?(?:https?:\/\/[^"\']*?)?(\/?)img\/cms\/([^"\')\s]+)["\']?\)/i',
+        ];
+
+        $files = [];
+        foreach ($patterns as $pattern) {
+            if (preg_match_all($pattern, $html, $matches)) {
+                foreach ($matches[2] as $filename) {
+                    $filename = trim($filename);
+                    if (!empty($filename)) {
+                        $files[$filename] = true;
+                    }
+                }
+            }
+        }
+
+        if (empty($files)) return;
+
+        $cmsImgDir = _PS_IMG_DIR_ . 'cms/';
+        if (!is_dir($cmsImgDir)) {
+            @mkdir($cmsImgDir, 0755, true);
+        }
+
+        foreach (array_keys($files) as $filename) {
+            $targetPath = $cmsImgDir . $filename;
+
+            // Create subdirectories if needed (e.g. img/cms/subdir/file.jpg)
+            $dir = dirname($targetPath);
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0755, true);
+            }
+
+            // Skip if file already exists (avoid re-downloading on repeated migrations)
+            if (file_exists($targetPath)) {
+                continue;
+            }
+
+            // Try bridge first, then direct HTTP
+            try {
+                $fileData = $this->db_connection->getFile('img/cms/' . $filename);
+                if ($fileData) {
+                    @file_put_contents($targetPath, $fileData);
+                    continue;
+                }
+            } catch (\Exception $e) {}
+
+            // Fallback: direct HTTP from source URL
+            if ($this->source_url) {
+                try {
+                    $fileData = @file_get_contents($this->source_url . '/img/cms/' . $filename);
+                    if ($fileData) {
+                        @file_put_contents($targetPath, $fileData);
+                    }
+                } catch (\Exception $e) {}
+            }
+        }
     }
 }
