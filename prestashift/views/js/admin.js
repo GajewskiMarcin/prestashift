@@ -332,16 +332,35 @@ var PrestaShift = {
                         orders: 'Orders', manufacturers: 'Manufacturers', carriers: 'Carriers',
                         cms: 'CMS Pages', images: 'Images', cart_rules: 'Cart Rules'
                     };
+                    // Map preview keys to scope keys
+                    var scopeMap = {
+                        products: 'catalog', categories: 'catalog', manufacturers: 'manufacturers',
+                        customers: 'customers', orders: 'orders', carriers: 'carriers',
+                        cms: 'cms', images: 'images', cart_rules: 'cart_rules'
+                    };
+                    // Check which scopes are enabled
+                    var enabledScopes = {};
+                    if (PrestaShift.scopeData) {
+                        $.each(PrestaShift.scopeData, function (i, field) {
+                            var m = field.name.match(/^scope\[(\w+)\]$/);
+                            if (m && field.value == '1') enabledScopes[m[1]] = true;
+                        });
+                    }
                     var html = '<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px;">';
+                    var shown = 0;
                     $.each(c, function (key, count) {
+                        var reqScope = scopeMap[key];
+                        if (reqScope && !enabledScopes[reqScope]) return; // skip disabled scopes
                         var label = labels[key] || key;
                         var color = count > 0 ? '#1e40af' : '#94a3b8';
                         html += '<div style="text-align:center; padding:8px; background:white; border-radius:6px; border:1px solid #e2e8f0;">';
                         html += '<div style="font-size:1.25rem; font-weight:700; color:' + color + ';">' + new Intl.NumberFormat().format(count) + '</div>';
                         html += '<div style="font-size:0.75rem; color:#64748b;">' + label + '</div>';
                         html += '</div>';
+                        shown++;
                     });
                     html += '</div>';
+                    if (shown === 0) html = '<p style="color:#64748b; text-align:center;">No data scopes selected</p>';
                     $('#preview-data').html(html);
                 } else {
                     $('#preview-data').html('<span style="color:#dc2626;">Could not load preview</span>');
