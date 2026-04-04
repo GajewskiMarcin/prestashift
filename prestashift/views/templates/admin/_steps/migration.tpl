@@ -100,19 +100,8 @@
     </div>
 
     <div class="ps-card ps-p-0 ps-overflow-hidden ps-border-slate-200">
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); text-align: center;">
-            <div style="padding: 2.5rem 1.5rem; border-right: 1px solid #e2e8f0;">
-                <p id="stat-products" class="ps-text-3xl ps-font-bold ps-text-blue-600" style="margin-bottom: 0.5rem;">0</p>
-                <p class="ps-text-sm ps-text-slate-500 ps-font-medium">{l s='Products Migrated' mod='prestashift'}</p>
-            </div>
-            <div style="padding: 2.5rem 1.5rem; border-right: 1px solid #e2e8f0;">
-                <p id="stat-orders" class="ps-text-3xl ps-font-bold ps-text-purple-600" style="margin-bottom: 0.5rem;">0</p>
-                <p class="ps-text-sm ps-text-slate-500 ps-font-medium">{l s='Orders Transferred' mod='prestashift'}</p>
-            </div>
-            <div style="padding: 2.5rem 1.5rem;">
-                <p id="stat-customers" class="ps-text-3xl ps-font-bold ps-text-purple-600" style="margin-bottom: 0.5rem;">0</p>
-                <p class="ps-text-sm ps-text-slate-500 ps-font-medium">{l s='Customers Synced' mod='prestashift'}</p>
-            </div>
+        <div id="final-stats-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); text-align: center;">
+            {* Populated dynamically by admin.js based on selected scopes *}
         </div>
     </div>
 

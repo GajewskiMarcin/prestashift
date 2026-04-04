@@ -388,16 +388,40 @@ var PrestaShift = {
                 }
                 PrestaShift.log('<strong>Migration Completed.</strong>');
 
-                // Display final stats from report (actual target DB counts)
+                // Build final stats grid from report, filtered by selected scopes
                 if (response.report) {
                     var r = response.report;
-                    $('#stat-products').text(new Intl.NumberFormat().format(r.products || 0));
-                    $('#stat-orders').text(new Intl.NumberFormat().format(r.orders || 0));
-                    $('#stat-customers').text(new Intl.NumberFormat().format(r.customers || 0));
-                } else {
-                    $('#stat-products').text(new Intl.NumberFormat().format(PrestaShift.stats.products));
-                    $('#stat-orders').text(new Intl.NumberFormat().format(PrestaShift.stats.orders));
-                    $('#stat-customers').text(new Intl.NumberFormat().format(PrestaShift.stats.customers));
+                    var reportLabels = {
+                        products: 'Products', categories: 'Categories', customers: 'Customers',
+                        orders: 'Orders', manufacturers: 'Manufacturers', cms_pages: 'CMS Pages',
+                        images: 'Images', carriers: 'Carriers'
+                    };
+                    var reportScopeMap = {
+                        products: 'catalog', categories: 'catalog', manufacturers: 'manufacturers',
+                        customers: 'customers', orders: 'orders', carriers: 'carriers',
+                        cms_pages: 'cms', images: 'images'
+                    };
+                    var enabledScopes = {};
+                    if (PrestaShift.scopeData) {
+                        $.each(PrestaShift.scopeData, function (i, field) {
+                            var m = field.name.match(/^scope\[(\w+)\]$/);
+                            if (m && field.value == '1') enabledScopes[m[1]] = true;
+                        });
+                    }
+                    var statsHtml = '';
+                    var colors = ['#2563eb', '#7c3aed', '#059669', '#d97706', '#dc2626', '#0891b2', '#4f46e5', '#16a34a'];
+                    var ci = 0;
+                    $.each(r, function (key, count) {
+                        var reqScope = reportScopeMap[key];
+                        if (reqScope && !enabledScopes[reqScope]) return;
+                        var label = reportLabels[key] || key;
+                        var color = colors[ci % colors.length]; ci++;
+                        statsHtml += '<div style="padding: 2rem 1rem; border-right: 1px solid #e2e8f0;">';
+                        statsHtml += '<p style="font-size:1.875rem; font-weight:700; color:' + color + '; margin-bottom:0.5rem;">' + new Intl.NumberFormat().format(count) + '</p>';
+                        statsHtml += '<p class="ps-text-sm ps-text-slate-500 ps-font-medium">' + label + '</p>';
+                        statsHtml += '</div>';
+                    });
+                    $('#final-stats-grid').html(statsHtml);
                 }
 
                 $('#main-progress-bar').css('width', '100%');
