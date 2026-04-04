@@ -259,15 +259,27 @@ class CarrierMigrationStep
 
     private function importDelivery($oldCarrierId, $newCarrierId, $rangeCol, $oldRangeId, $newRangeId, $shopId, $shopGroupId)
     {
-        $deliveries = $this->db_connection->query(
-            "SELECT * FROM `{$this->prefix}delivery`
-             WHERE id_carrier = $oldCarrierId AND $rangeCol = $oldRangeId"
-        )->fetchAll(PDO::FETCH_ASSOC);
+        try {
+            $deliveries = $this->db_connection->query(
+                "SELECT * FROM `{$this->prefix}delivery`
+                 WHERE id_carrier = $oldCarrierId AND $rangeCol = $oldRangeId"
+            )->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Exception $e) {
+            $log = \PrestaShift\Service\LogService::getInstance();
+            $log->error("Carrier delivery fetch failed: carrier=$oldCarrierId, $rangeCol=$oldRangeId: " . $e->getMessage());
+            return;
+        }
+
+        $log = \PrestaShift\Service\LogService::getInstance();
+        $log->info("Carrier delivery: old_carrier=$oldCarrierId, new_carrier=$newCarrierId, $rangeCol old=$oldRangeId new=$newRangeId, found=" . count($deliveries) . " rows, zoneMap=" . json_encode($this->zoneMap));
 
         foreach ($deliveries as $d) {
-            $mappedZone = $this->mapZoneId($d['id_zone']);
+            $oldZone = (int)$d['id_zone'];
+            $mappedZone = $this->mapZoneId($oldZone);
+
             if ($mappedZone === null) {
-                continue; // Zone not mapped — skip
+                $log->warning("Carrier delivery skipped: zone $oldZone has no mapping");
+                continue;
             }
 
             unset($d['id_delivery']); // new auto-increment
@@ -289,7 +301,12 @@ class CarrierMigrationStep
             if ($sql) {
                 try {
                     Db::getInstance()->execute($sql);
-                } catch (\Exception $e) {}
+                    $log->info("Carrier delivery inserted: carrier=$newCarrierId, zone=$mappedZone, price=" . $d['price']);
+                } catch (\Exception $e) {
+                    $log->error("Carrier delivery insert failed: " . $e->getMessage() . " SQL: " . $sql);
+                }
+            } else {
+                $log->error("Carrier delivery buildInsertQuery returned null for carrier=$newCarrierId");
             }
         }
     }
