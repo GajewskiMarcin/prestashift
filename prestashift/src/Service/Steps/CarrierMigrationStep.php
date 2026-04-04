@@ -31,10 +31,8 @@ class CarrierMigrationStep
 
     public function process($offset, $limit, $dateFilter = null)
     {
-        // Build zone map on first batch
-        if ($offset == 0) {
-            $this->buildZoneMap();
-        }
+        // Build zone map on every batch (object is recreated per AJAX request)
+        $this->buildZoneMap();
 
         $items = $this->getData($offset, $limit);
 
