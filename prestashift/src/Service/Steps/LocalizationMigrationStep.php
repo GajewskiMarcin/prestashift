@@ -27,7 +27,8 @@ class LocalizationMigrationStep
     {
         // One-shot migration for all localization data (usually small tables)
         if ($offset == 0) {
-            $this->migrateZones();
+            // Note: zones are NOT migrated — PS9 has its own default zones.
+            // Countries are migrated but id_zone is preserved from target.
             $this->migrateCountries();
             $this->migrateCurrencies();
             $this->migrateLanguages();
@@ -36,17 +37,12 @@ class LocalizationMigrationStep
         return ['count' => 1, 'finished' => true];
     }
     
-    private function migrateZones() {
-        $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}zone`")->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($rows as $row) {
-             SchemaHelper::upsert('zone', $row, ['id_zone']);
-        }
-    }
-    
     private function migrateCountries() {
         $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}country`")->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as $row) {
-             // Basic Upsert
+             // Remove id_zone — preserve target's zone assignments
+             unset($row['id_zone']);
+
              SchemaHelper::upsert('country', $row, ['id_country']);
              
              // Lang

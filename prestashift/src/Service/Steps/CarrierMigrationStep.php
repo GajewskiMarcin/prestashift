@@ -1,10 +1,10 @@
 <?php
 /**
  * PrestaShift Migration Module
- * 
+ *
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
- * @version   1.0.0
+ * @version   1.1.0
  */
 namespace PrestaShift\Service\Steps;
 
@@ -16,7 +16,8 @@ class CarrierMigrationStep
 {
     private $db_connection;
     private $prefix;
-    private $skip_files; // Carriers have logos too
+    private $skip_files;
+    private $zoneMap = [];
 
     public function __construct($db_connection, $prefix, $skip_files = false)
     {
@@ -27,6 +28,11 @@ class CarrierMigrationStep
 
     public function process($offset, $limit, $dateFilter = null)
     {
+        // Build zone map on first batch
+        if ($offset == 0) {
+            $this->buildZoneMap();
+        }
+
         $items = $this->getData($offset, $limit);
 
         if (empty($items)) {
@@ -40,136 +46,268 @@ class CarrierMigrationStep
         return ['count' => count($items), 'finished' => false];
     }
 
+    /**
+     * Build a map of source zone IDs → target zone IDs based on zone name matching
+     */
+    private function buildZoneMap()
+    {
+        // Get source zones
+        try {
+            $sourceZones = $this->db_connection->query(
+                "SELECT id_zone, name FROM `{$this->prefix}zone`"
+            )->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Exception $e) {
+            return;
+        }
+
+        // Get target zones
+        $targetZones = Db::getInstance()->executeS(
+            "SELECT id_zone, name FROM `" . _DB_PREFIX_ . "zone`"
+        );
+
+        // Build target lookup by lowercase name
+        $targetByName = [];
+        foreach ($targetZones as $tz) {
+            $targetByName[strtolower(trim($tz['name']))] = (int)$tz['id_zone'];
+        }
+
+        // Map source → target
+        foreach ($sourceZones as $sz) {
+            $srcId = (int)$sz['id_zone'];
+            $srcName = strtolower(trim($sz['name']));
+
+            if (isset($targetByName[$srcName])) {
+                // Exact name match
+                $this->zoneMap[$srcId] = $targetByName[$srcName];
+            } else {
+                // Try partial match (e.g. source "Polska" → target "Europe")
+                // For now, skip unmapped zones — carrier won't deliver there
+                // Could be improved with a manual mapping UI
+            }
+        }
+    }
+
+    /**
+     * Map a source zone ID to target zone ID, returns null if no mapping exists
+     */
+    private function mapZoneId($sourceZoneId)
+    {
+        return isset($this->zoneMap[(int)$sourceZoneId]) ? $this->zoneMap[(int)$sourceZoneId] : null;
+    }
+
     private function getData($offset, $limit)
     {
-        // Migrating deleted carriers is usually not needed for new setup, but valuable for old order history.
-        // We will migrate ALL to be safe.
-        $sql = "SELECT * FROM `{$this->prefix}carrier` ORDER BY `id_carrier` ASC LIMIT $limit OFFSET $offset";
+        // Only active, non-deleted carriers
+        $sql = "SELECT * FROM `{$this->prefix}carrier`
+                WHERE active = 1 AND deleted = 0
+                ORDER BY `id_carrier` ASC LIMIT $limit OFFSET $offset";
         $stmt = $this->db_connection->query($sql);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     private function importCarrier($data)
     {
-        $id = (int)$data['id_carrier'];
-        
-        // Basic Carrier Data
-        $sql = SchemaHelper::buildUpsertQuery('carrier', $data, ['id_carrier']);
-        if ($sql) {
-            try {
-                Db::getInstance()->execute($sql);
-            } catch (\Exception $e) { return; }
+        $oldId = (int)$data['id_carrier'];
+
+        // Remove id_carrier — let PS9 assign new auto-increment ID
+        unset($data['id_carrier']);
+
+        // Clean up fields
+        $data['deleted'] = 0;
+        $data['active'] = 1;
+
+        // Insert carrier with new ID
+        $sql = SchemaHelper::buildInsertQuery('carrier', $data);
+        if (!$sql) return;
+
+        try {
+            Db::getInstance()->execute($sql);
+        } catch (\Exception $e) {
+            return;
         }
+
+        $newId = (int)Db::getInstance()->getValue("SELECT LAST_INSERT_ID()");
+        if (!$newId) return;
 
         // Lang
-        $this->importCarrierLang($id);
-        
-        // Shops (Link to shop 1)
-        Db::getInstance()->execute("REPLACE INTO `" . \_DB_PREFIX_ . "carrier_shop` (id_carrier, id_shop) VALUES ($id, " . \PrestaShift\Service\SchemaHelper::getTargetShopId() . ")");
+        $this->importCarrierLang($oldId, $newId);
 
-        // Groups (Access)
-        $this->importCarrierGroups($id);
+        // Shop
+        $shopId = SchemaHelper::getTargetShopId();
+        Db::getInstance()->execute(
+            "REPLACE INTO `" . _DB_PREFIX_ . "carrier_shop` (id_carrier, id_shop) VALUES ($newId, $shopId)"
+        );
 
-        // Zones (Where it delivers)
-        $this->importCarrierZones($id);
+        // Groups
+        $this->importCarrierGroups($oldId, $newId);
 
-        // Ranges & Delivery Prices
-        $this->importRangesAndDelivery($id, $data);
-        
-        // Tax Rules Group Shop (Association)
-        $this->importTaxRules($id);
+        // Zones (with mapping)
+        $this->importCarrierZones($oldId, $newId);
+
+        // Ranges & Delivery
+        $this->importRangesAndDelivery($oldId, $newId);
+
+        // Tax Rules
+        $this->importTaxRules($oldId, $newId);
     }
-    
-    private function importCarrierLang($id) {
-        $sql = "SELECT * FROM `{$this->prefix}carrier_lang` WHERE id_carrier = $id";
-        $rows = $this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+
+    private function importCarrierLang($oldId, $newId)
+    {
+        $rows = $this->db_connection->query(
+            "SELECT * FROM `{$this->prefix}carrier_lang` WHERE id_carrier = $oldId"
+        )->fetchAll(PDO::FETCH_ASSOC);
+
         foreach ($rows as $row) {
-             $row['id_shop'] = \PrestaShift\Service\SchemaHelper::getTargetShopId();
-             $sql = SchemaHelper::buildInsertQuery('carrier_lang', $row);
-             if($sql) {
-                 $sql = str_replace('INSERT INTO', 'REPLACE INTO', $sql);
-                 Db::getInstance()->execute($sql);
-             }
+            $row['id_carrier'] = $newId;
+            $row['id_shop'] = SchemaHelper::getTargetShopId();
+            $sql = SchemaHelper::buildInsertQuery('carrier_lang', $row);
+            if ($sql) {
+                $sql = str_replace('INSERT INTO', 'REPLACE INTO', $sql);
+                Db::getInstance()->execute($sql);
+            }
         }
     }
-    
-    private function importCarrierGroups($id) {
-        $sql = "SELECT * FROM `{$this->prefix}carrier_group` WHERE id_carrier = $id";
-        $rows = $this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC);
-        Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "carrier_group` WHERE id_carrier = $id");
-        
+
+    private function importCarrierGroups($oldId, $newId)
+    {
+        $rows = $this->db_connection->query(
+            "SELECT * FROM `{$this->prefix}carrier_group` WHERE id_carrier = $oldId"
+        )->fetchAll(PDO::FETCH_ASSOC);
+
         foreach ($rows as $row) {
-             Db::getInstance()->execute("INSERT IGNORE INTO `" . \_DB_PREFIX_ . "carrier_group` (id_carrier, id_group) VALUES ($id, " . (int)$row['id_group'] . ")");
+            Db::getInstance()->execute(
+                "INSERT IGNORE INTO `" . _DB_PREFIX_ . "carrier_group` (id_carrier, id_group)
+                 VALUES ($newId, " . (int)$row['id_group'] . ")"
+            );
         }
     }
-    
-    private function importCarrierZones($id) {
-         $sql = "SELECT * FROM `{$this->prefix}carrier_zone` WHERE id_carrier = $id";
-         $rows = $this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC);
-         Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "carrier_zone` WHERE id_carrier = $id");
-         
-         foreach ($rows as $row) {
-              Db::getInstance()->execute("INSERT IGNORE INTO `" . \_DB_PREFIX_ . "carrier_zone` (id_carrier, id_zone) VALUES ($id, " . (int)$row['id_zone'] . ")");
-         }
+
+    private function importCarrierZones($oldId, $newId)
+    {
+        $rows = $this->db_connection->query(
+            "SELECT * FROM `{$this->prefix}carrier_zone` WHERE id_carrier = $oldId"
+        )->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($rows as $row) {
+            $mappedZone = $this->mapZoneId($row['id_zone']);
+            if ($mappedZone === null) {
+                continue; // Zone doesn't exist in target — skip
+            }
+
+            Db::getInstance()->execute(
+                "INSERT IGNORE INTO `" . _DB_PREFIX_ . "carrier_zone` (id_carrier, id_zone)
+                 VALUES ($newId, $mappedZone)"
+            );
+        }
     }
-    
-    private function importRangesAndDelivery($id_carrier, $carrierData) {
+
+    private function importRangesAndDelivery($oldId, $newId)
+    {
+        $shopId = SchemaHelper::getTargetShopId();
+
+        // Get shop group from target
+        $shopGroupId = (int)Db::getInstance()->getValue(
+            "SELECT id_shop_group FROM `" . _DB_PREFIX_ . "shop` WHERE id_shop = $shopId"
+        );
+
         // Range Weight
-        $sqlW = "SELECT * FROM `{$this->prefix}range_weight` WHERE id_carrier = $id_carrier";
-        $weights = $this->db_connection->query($sqlW)->fetchAll(PDO::FETCH_ASSOC);
+        $weights = $this->db_connection->query(
+            "SELECT * FROM `{$this->prefix}range_weight` WHERE id_carrier = $oldId"
+        )->fetchAll(PDO::FETCH_ASSOC);
+
         foreach ($weights as $w) {
-            $id_range = (int)$w['id_range_weight'];
-            $sql = SchemaHelper::buildUpsertQuery('range_weight', $w, ['id_range_weight']);
-            if($sql) Db::getInstance()->execute($sql);
-            
-            // Delivery Prices for this Range
-             $this->importDeliveryPrices('id_range_weight', $id_range, $id_carrier);
+            $oldRangeId = (int)$w['id_range_weight'];
+            unset($w['id_range_weight']); // new auto-increment
+            $w['id_carrier'] = $newId;
+
+            $sql = SchemaHelper::buildInsertQuery('range_weight', $w);
+            if ($sql) {
+                Db::getInstance()->execute($sql);
+                $newRangeId = (int)Db::getInstance()->getValue("SELECT LAST_INSERT_ID()");
+
+                // Delivery prices for this weight range
+                $this->importDelivery($oldId, $newId, 'id_range_weight', $oldRangeId, $newRangeId, $shopId, $shopGroupId);
+            }
         }
 
         // Range Price
-        $sqlP = "SELECT * FROM `{$this->prefix}range_price` WHERE id_carrier = $id_carrier";
-        $prices = $this->db_connection->query($sqlP)->fetchAll(PDO::FETCH_ASSOC);
+        $prices = $this->db_connection->query(
+            "SELECT * FROM `{$this->prefix}range_price` WHERE id_carrier = $oldId"
+        )->fetchAll(PDO::FETCH_ASSOC);
+
         foreach ($prices as $p) {
-            $id_range = (int)$p['id_range_price'];
-            $sql = SchemaHelper::buildUpsertQuery('range_price', $p, ['id_range_price']);
-            if($sql) Db::getInstance()->execute($sql);
-            
-            // Delivery Prices for this Range
-             $this->importDeliveryPrices('id_range_price', $id_range, $id_carrier);
+            $oldRangeId = (int)$p['id_range_price'];
+            unset($p['id_range_price']); // new auto-increment
+            $p['id_carrier'] = $newId;
+
+            $sql = SchemaHelper::buildInsertQuery('range_price', $p);
+            if ($sql) {
+                Db::getInstance()->execute($sql);
+                $newRangeId = (int)Db::getInstance()->getValue("SELECT LAST_INSERT_ID()");
+
+                // Delivery prices for this price range
+                $this->importDelivery($oldId, $newId, 'id_range_price', $oldRangeId, $newRangeId, $shopId, $shopGroupId);
+            }
         }
     }
-    
-    private function importDeliveryPrices($rangeCol, $rangeId, $id_carrier) {
-        // fetch from source ps_delivery
-        $sql = "SELECT * FROM `{$this->prefix}delivery` WHERE $rangeCol = $rangeId AND id_carrier = $id_carrier";
-        $deliveries = $this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC);
-        
+
+    private function importDelivery($oldCarrierId, $newCarrierId, $rangeCol, $oldRangeId, $newRangeId, $shopId, $shopGroupId)
+    {
+        $deliveries = $this->db_connection->query(
+            "SELECT * FROM `{$this->prefix}delivery`
+             WHERE id_carrier = $oldCarrierId AND $rangeCol = $oldRangeId"
+        )->fetchAll(PDO::FETCH_ASSOC);
+
         foreach ($deliveries as $d) {
-             $d['id_shop'] = \PrestaShift\Service\SchemaHelper::getTargetShopId();
-             $d['id_shop_group'] = 0;
-             $sql = SchemaHelper::buildUpsertQuery('delivery', $d, ['id_delivery']);
-             if($sql) {
-                  try { Db::getInstance()->execute($sql); } catch(\Exception $e){}
-             }
+            $mappedZone = $this->mapZoneId($d['id_zone']);
+            if ($mappedZone === null) {
+                continue; // Zone not mapped — skip
+            }
+
+            unset($d['id_delivery']); // new auto-increment
+            $d['id_carrier'] = $newCarrierId;
+            $d['id_zone'] = $mappedZone;
+            $d['id_shop'] = $shopId;
+            $d['id_shop_group'] = $shopGroupId;
+
+            // Set the correct range ID
+            if ($rangeCol === 'id_range_weight') {
+                $d['id_range_weight'] = $newRangeId;
+                $d['id_range_price'] = 0;
+            } else {
+                $d['id_range_price'] = $newRangeId;
+                $d['id_range_weight'] = 0;
+            }
+
+            $sql = SchemaHelper::buildInsertQuery('delivery', $d);
+            if ($sql) {
+                try {
+                    Db::getInstance()->execute($sql);
+                } catch (\Exception $e) {}
+            }
         }
     }
-    
-    private function importTaxRules($id_carrier) {
-         // Some versions store this in ps_carrier_tax_rules_group_shop
-         $table = $this->prefix . 'carrier_tax_rules_group_shop';
-         // Check if table exists in source
-         $check = $this->db_connection->query("SHOW TABLES LIKE '$table'")->fetch();
-         if ($check) {
-              $sql = "SELECT * FROM `$table` WHERE id_carrier = $id_carrier";
-              $rows = $this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC);
-              foreach ($rows as $row) {
-                  $row['id_shop'] = \PrestaShift\Service\SchemaHelper::getTargetShopId();
-                  $sqlIns = SchemaHelper::buildInsertQuery('carrier_tax_rules_group_shop', $row);
-                  if($sqlIns) {
-                      $sqlIns = str_replace('INSERT INTO', 'REPLACE INTO', $sqlIns);
-                      Db::getInstance()->execute($sqlIns);
-                  }
-              }
-         }
+
+    private function importTaxRules($oldId, $newId)
+    {
+        $table = $this->prefix . 'carrier_tax_rules_group_shop';
+        try {
+            $check = $this->db_connection->query("SHOW TABLES LIKE '$table'")->fetch();
+            if (!$check) return;
+
+            $rows = $this->db_connection->query(
+                "SELECT * FROM `$table` WHERE id_carrier = $oldId"
+            )->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($rows as $row) {
+                $row['id_carrier'] = $newId;
+                $row['id_shop'] = SchemaHelper::getTargetShopId();
+                $sql = SchemaHelper::buildInsertQuery('carrier_tax_rules_group_shop', $row);
+                if ($sql) {
+                    $sql = str_replace('INSERT INTO', 'REPLACE INTO', $sql);
+                    Db::getInstance()->execute($sql);
+                }
+            }
+        } catch (\Exception $e) {}
     }
 }
