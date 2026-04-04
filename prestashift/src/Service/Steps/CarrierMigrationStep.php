@@ -285,8 +285,10 @@ class CarrierMigrationStep
             unset($d['id_delivery']); // new auto-increment
             $d['id_carrier'] = $newCarrierId;
             $d['id_zone'] = $mappedZone;
-            $d['id_shop'] = $shopId;
-            $d['id_shop_group'] = $shopGroupId;
+            // PS9 CQRS requires id_shop and id_shop_group to be NULL
+            // See CarrierRangeRepository::applyShopConstraint()
+            $d['id_shop'] = null;
+            $d['id_shop_group'] = null;
 
             // Set the correct range ID
             if ($rangeCol === 'id_range_weight') {
