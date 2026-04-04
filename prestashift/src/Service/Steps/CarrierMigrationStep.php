@@ -18,12 +18,15 @@ class CarrierMigrationStep
     private $prefix;
     private $skip_files;
     private $zoneMap = [];
+    private $userZoneMap = [];
 
-    public function __construct($db_connection, $prefix, $skip_files = false)
+    public function __construct($db_connection, $prefix, $skip_files = false, $zoneMap = [])
     {
         $this->db_connection = $db_connection;
         $this->prefix = $prefix;
         $this->skip_files = $skip_files;
+        // User-defined zone map from UI (source_id => target_id)
+        $this->userZoneMap = $zoneMap;
     }
 
     public function process($offset, $limit, $dateFilter = null)
@@ -47,11 +50,21 @@ class CarrierMigrationStep
     }
 
     /**
-     * Build a map of source zone IDs → target zone IDs based on zone name matching
+     * Build a map of source zone IDs → target zone IDs
+     * Priority: user-defined map from UI > auto-match by name
      */
     private function buildZoneMap()
     {
-        // Get source zones
+        // 1. Apply user-defined mappings first (from UI zone_map selects)
+        foreach ($this->userZoneMap as $srcId => $tgtId) {
+            $tgtId = (int)$tgtId;
+            if ($tgtId > 0) {
+                $this->zoneMap[(int)$srcId] = $tgtId;
+            }
+            // If tgtId = 0 or empty → user chose "skip", leave unmapped
+        }
+
+        // 2. Auto-match remaining unmapped zones by name
         try {
             $sourceZones = $this->db_connection->query(
                 "SELECT id_zone, name FROM `{$this->prefix}zone`"
@@ -60,29 +73,24 @@ class CarrierMigrationStep
             return;
         }
 
-        // Get target zones
         $targetZones = Db::getInstance()->executeS(
             "SELECT id_zone, name FROM `" . _DB_PREFIX_ . "zone`"
         );
 
-        // Build target lookup by lowercase name
         $targetByName = [];
         foreach ($targetZones as $tz) {
             $targetByName[strtolower(trim($tz['name']))] = (int)$tz['id_zone'];
         }
 
-        // Map source → target
         foreach ($sourceZones as $sz) {
             $srcId = (int)$sz['id_zone'];
+            // Skip if already mapped by user
+            if (isset($this->zoneMap[$srcId])) {
+                continue;
+            }
             $srcName = strtolower(trim($sz['name']));
-
             if (isset($targetByName[$srcName])) {
-                // Exact name match
                 $this->zoneMap[$srcId] = $targetByName[$srcName];
-            } else {
-                // Try partial match (e.g. source "Polska" → target "Europe")
-                // For now, skip unmapped zones — carrier won't deliver there
-                // Could be improved with a manual mapping UI
             }
         }
     }

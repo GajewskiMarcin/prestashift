@@ -177,6 +177,7 @@ var PrestaShift = {
                     }
                     if (step === 3) {
                         PrestaShift.loadStatusMapping();
+                        PrestaShift.loadZoneMapping();
                         PrestaShift.bindStepEvents(3);
                     }
                     if (step === 4) {
@@ -250,6 +251,67 @@ var PrestaShift = {
 
         // Simplified entities logic for now
         PrestaShift.checkSavedState();
+    },
+
+    loadZoneMapping: function () {
+        var carriersEnabled = false;
+        if (PrestaShift.scopeData) {
+            $.each(PrestaShift.scopeData, function (i, field) {
+                if (field.name === 'scope[carriers]' && field.value == '1') carriersEnabled = true;
+            });
+        }
+        if (!carriersEnabled) { $('#zone-mapping-area').hide(); return; }
+
+        $('#zone-mapping-area').show();
+        var allData = [];
+        if (PrestaShift.connectionData) allData = allData.concat(PrestaShift.connectionData);
+        var formData = $.param(allData);
+
+        $.ajax({
+            url: controller_url,
+            type: 'POST',
+            data: formData + '&ajax=true&action=get_source_zones',
+            dataType: 'json',
+            success: function (response) {
+                if (response.success) {
+                    PrestaShift.renderZoneTable(response.source_zones, response.local_zones);
+                } else {
+                    $('#zone-mapping-table-container').html('<div class="alert alert-danger">' + (response.message || 'Error') + '</div>');
+                }
+            },
+            error: function () {
+                $('#zone-mapping-table-container').html('<div class="alert alert-danger">Error fetching zones</div>');
+            }
+        });
+    },
+
+    renderZoneTable: function (sourceZones, localZones) {
+        var html = '<div class="ps-space-y-2">';
+        $.each(sourceZones, function (i, source) {
+            html += '<div class="ps-flex-between ps-p-3 ps-border ps-border-slate-200 ps-rounded-md ps-bg-slate-50">';
+
+            html += '<div class="ps-flex-start ps-gap-2" style="flex: 1;">';
+            html += '<span class="ps-font-medium ps-text-slate-700">' + source.name + '</span>';
+            html += '<span class="ps-text-xs ps-text-slate-400">(ID: ' + source.id_zone + ')</span>';
+            html += '</div>';
+
+            html += '<div class="ps-text-slate-400" style="padding: 0 24px;"><i class="icon-long-arrow-right"></i></div>';
+
+            html += '<div style="min-width: 250px;">';
+            html += '<select name="zone_map[' + source.id_zone + ']" class="ps-input" style="height: 36px; padding: 4px 8px;">';
+            html += '<option value="">-- skip --</option>';
+            var found = false;
+            $.each(localZones, function (j, local) {
+                var selected = "";
+                if (!found && local.name.toLowerCase().trim() == source.name.toLowerCase().trim()) {
+                    selected = "selected"; found = true;
+                }
+                html += '<option value="' + local.id_zone + '" ' + selected + '>' + local.name + '</option>';
+            });
+            html += '</select></div></div>';
+        });
+        html += '</div>';
+        $('#zone-mapping-table-container').html(html);
     },
 
     loadPreview: function () {

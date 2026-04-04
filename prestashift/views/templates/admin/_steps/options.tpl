@@ -168,6 +168,23 @@
             </div>
          </div>
 
+         {* Zone Mapping *}
+         <div id="zone-mapping-area" style="display: none;">
+            <div class="ps-card ps-p-6 ps-space-y-6">
+                 <div class="ps-flex-start ps-gap-3" style="padding-bottom: 0.5rem; align-items: center !important;">
+                    <div style="background: #dcfce7; width: 2.5rem; height: 2.5rem; display:flex; align-items:center; justify-content:center; border-radius: 8px;">
+                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" x2="9" y1="3" y2="18"/><line x1="15" x2="15" y1="6" y2="21"/></svg>
+                    </div>
+                    <h3 class="ps-font-semibold ps-text-slate-900">{l s='Zone Mapping' mod='prestashift'}</h3>
+                </div>
+                <p class="ps-text-sm ps-text-slate-500">{l s='Map source zones to target zones for carrier delivery configuration' mod='prestashift'}</p>
+
+                 <div id="zone-mapping-table-container">
+                     <!-- Populated by admin.js -->
+                 </div>
+            </div>
+         </div>
+
     </form>
     
     <div class="ps-flex-between">

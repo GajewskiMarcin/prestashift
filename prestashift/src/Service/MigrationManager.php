@@ -635,7 +635,8 @@ class MigrationManager
             // 15c. Carriers
             case 'carriers':
                 $skip_files = isset($config['options']['skip_files']) && $config['options']['skip_files'];
-                $step = new Steps\CarrierMigrationStep($conn, $prefix, $skip_files);
+                $zone_map = isset($config['options']['zone_map']) ? $config['options']['zone_map'] : [];
+                $step = new Steps\CarrierMigrationStep($conn, $prefix, $skip_files, $zone_map);
                 $result = $step->process($offset, $limit, $lastDate);
                 $message = sprintf($this->l('Migrating carriers (Offset: %d)...'), $offset);
                 if ($result['finished']) {

@@ -450,6 +450,12 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $config['options']['status_map'] = $statusMap;
         }
 
+        // Zone mapping for carrier migration
+        $zoneMap = Tools::getValue('zone_map', []);
+        if (!empty($zoneMap)) {
+            $config['options']['zone_map'] = $zoneMap;
+        }
+
         try {
             // 2. Cleanup if requested
             if (!empty($config['options']['clean_target'])) {
@@ -760,6 +766,59 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $response = [
                 'success' => false,
                 'message' => $this->module->l('Error fetching statuses:') . ' ' . $e->getMessage()
+            ];
+        }
+
+        $json = json_encode($response);
+        ob_end_clean();
+        header('Content-Type: application/json');
+        die($json);
+    }
+
+    public function ajaxProcessgetSourceZones()
+    {
+        ob_start();
+        try {
+            $method = Tools::getValue('connection_method', 'bridge');
+            $config = [
+                'connection_method' => $method,
+                'db_prefix' => Tools::getValue('db_prefix', 'ps_'),
+                'source_url' => rtrim(Tools::getValue('source_url', ''), '/'),
+            ];
+            if ($method === 'direct') {
+                $config['db_host'] = Tools::getValue('db_host', 'localhost');
+                $config['db_port'] = (int)Tools::getValue('db_port', 3306);
+                $config['db_name'] = Tools::getValue('db_name');
+                $config['db_user'] = Tools::getValue('db_user');
+                $config['db_pass'] = Tools::getValue('db_pass', '');
+            } else {
+                $config['bridge_token'] = Tools::getValue('bridge_token');
+            }
+
+            $manager = new \PrestaShift\Service\MigrationManager();
+            $conn = $manager->getConnection($config);
+            $prefix = $config['db_prefix'];
+
+            // Source zones
+            $sourceZones = $conn->query(
+                "SELECT id_zone, name FROM `{$prefix}zone` WHERE active = 1 ORDER BY name ASC"
+            )->fetchAll(\PDO::FETCH_ASSOC);
+
+            // Target zones
+            $localZones = \Db::getInstance()->executeS(
+                "SELECT id_zone, name FROM `" . _DB_PREFIX_ . "zone` WHERE active = 1 ORDER BY name ASC"
+            );
+
+            $response = [
+                'success' => true,
+                'source_zones' => $sourceZones,
+                'local_zones' => $localZones
+            ];
+
+        } catch (\Throwable $e) {
+            $response = [
+                'success' => false,
+                'message' => $this->module->l('Error fetching zones:') . ' ' . $e->getMessage()
             ];
         }
 
