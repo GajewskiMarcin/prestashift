@@ -226,12 +226,18 @@ class ProductMigrationStep
     }
 
     private function importStock($id_product) {
-        // Source quantity is often in `ps_stock_available` since 1.5
-        $sql = "SELECT quantity FROM `{$this->prefix}stock_available` WHERE id_product = $id_product AND id_product_attribute = 0";
-        $qty = (int)$this->db_connection->query($sql)->fetchColumn();
-        
-        // Update Target
+        // Source quantity and out_of_stock setting from ps_stock_available
+        $sql = "SELECT quantity, out_of_stock FROM `{$this->prefix}stock_available` WHERE id_product = $id_product AND id_product_attribute = 0";
+        $row = $this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+
+        $qty = isset($row[0]['quantity']) ? (int)$row[0]['quantity'] : 0;
+        $outOfStock = isset($row[0]['out_of_stock']) ? (int)$row[0]['out_of_stock'] : 2;
+
+        // Update quantity
         \StockAvailable::setQuantity($id_product, 0, $qty);
+
+        // Update out_of_stock setting (0=deny, 1=allow, 2=use global)
+        \StockAvailable::setProductOutOfStock($id_product, $outOfStock);
     }
     
     private function importCategoryLink($id_product, $id_cat_default) {
