@@ -74,6 +74,15 @@ class CleanupService
             ]);
         }
 
+        if (!empty($scope['carriers'])) {
+            $tablesToClean = array_merge($tablesToClean, [
+                'carrier', 'carrier_lang', 'carrier_shop',
+                'carrier_group', 'carrier_zone',
+                'carrier_tax_rules_group_shop',
+                'range_weight', 'range_price', 'delivery'
+            ]);
+        }
+
         if (!empty($scope['cart_rules'])) {
             $tablesToClean = array_merge($tablesToClean, [
                 'cart_rule', 'cart_rule_lang', 'cart_rule_shop',
