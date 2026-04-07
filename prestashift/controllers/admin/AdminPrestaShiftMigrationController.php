@@ -558,7 +558,27 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $tasks[] = ['label' => $this->module->l('Faceted search reindex failed'), 'ok' => false, 'error' => $e->getMessage()];
         }
 
-        // 6. Refresh product indexing flags
+        // 6. Remove orphaned product combinations (no attributes assigned)
+        try {
+            $orphaned = (int)\Db::getInstance()->getValue(
+                "SELECT COUNT(*) FROM `" . _DB_PREFIX_ . "product_attribute` pa
+                 LEFT JOIN `" . _DB_PREFIX_ . "product_attribute_combination` pac ON pa.id_product_attribute = pac.id_product_attribute
+                 WHERE pac.id_attribute IS NULL"
+            );
+            if ($orphaned > 0) {
+                \Db::getInstance()->execute(
+                    "DELETE pa, pas FROM `" . _DB_PREFIX_ . "product_attribute` pa
+                     LEFT JOIN `" . _DB_PREFIX_ . "product_attribute_shop` pas ON pa.id_product_attribute = pas.id_product_attribute
+                     LEFT JOIN `" . _DB_PREFIX_ . "product_attribute_combination` pac ON pa.id_product_attribute = pac.id_product_attribute
+                     WHERE pac.id_attribute IS NULL"
+                );
+                $tasks[] = ['label' => sprintf($this->module->l('Removed %d orphaned combinations'), $orphaned), 'ok' => true];
+            }
+        } catch (\Throwable $e) {
+            $tasks[] = ['label' => $this->module->l('Orphaned combinations cleanup failed'), 'ok' => false, 'error' => $e->getMessage()];
+        }
+
+        // 7. Refresh product indexing flags
         try {
             \Db::getInstance()->execute("UPDATE `" . _DB_PREFIX_ . "product` SET `indexed` = 1");
             $tasks[] = ['label' => $this->module->l('Product index flags updated'), 'ok' => true];

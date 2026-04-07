@@ -231,13 +231,13 @@ class ProductMigrationStep
         $row = $this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 
         $qty = isset($row[0]['quantity']) ? (int)$row[0]['quantity'] : 0;
-        $outOfStock = isset($row[0]['out_of_stock']) ? (int)$row[0]['out_of_stock'] : 2;
 
         // Update quantity
         \StockAvailable::setQuantity($id_product, 0, $qty);
 
-        // Update out_of_stock setting (0=deny, 1=allow, 2=use global)
-        \StockAvailable::setProductOutOfStock($id_product, $outOfStock);
+        // Force out_of_stock=2 (use global setting) — safer than copying
+        // per-product overrides from source which may be stale or incorrect
+        \StockAvailable::setProductOutOfStock($id_product, 2);
     }
     
     private function importCategoryLink($id_product, $id_cat_default) {
