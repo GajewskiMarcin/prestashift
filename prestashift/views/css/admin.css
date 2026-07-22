@@ -1,0 +1,550 @@
+/* 
+ * PrestaShift Modern UI - V7 (Figma Source Match - High Specificity)
+ * Scoped to #prestashift-app to defeat PrestaShop default styles.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+#prestashift-app {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+    color: #0f172a !important;
+    /* slate-900 */
+    line-height: 1.5 !important;
+    font-size: 14px !important;
+    box-sizing: border-box !important;
+    max-width: 1120px !important;
+    margin: 0 auto !important;
+    padding: 24px !important;
+    text-align: left !important;
+    background: transparent !important;
+}
+
+#prestashift-app *,
+#prestashift-app *::before,
+#prestashift-app *::after {
+    box-sizing: border-box !important;
+}
+
+/* --- TYPOGRAPHY (Scoped) --- */
+#prestashift-app .ps-text-center {
+    text-align: center !important;
+}
+
+#prestashift-app .ps-font-semibold {
+    font-weight: 600 !important;
+}
+
+#prestashift-app .ps-font-bold {
+    font-weight: 700 !important;
+}
+
+#prestashift-app .ps-font-medium {
+    font-weight: 500 !important;
+}
+
+#prestashift-app .ps-text-2xl {
+    font-size: 1.5rem !important;
+    line-height: 2rem !important;
+}
+
+#prestashift-app .ps-text-xl {
+    font-size: 1.25rem !important;
+    line-height: 1.75rem !important;
+}
+
+#prestashift-app .ps-text-lg {
+    font-size: 1.125rem !important;
+    line-height: 1.75rem !important;
+}
+
+#prestashift-app .ps-text-sm {
+    font-size: 0.875rem !important;
+    line-height: 1.25rem !important;
+}
+
+#prestashift-app .ps-text-xs {
+    font-size: 0.75rem !important;
+    line-height: 1rem !important;
+}
+
+#prestashift-app .ps-text-slate-900 {
+    color: #0f172a !important;
+}
+
+#prestashift-app .ps-text-slate-700 {
+    color: #334155 !important;
+}
+
+#prestashift-app .ps-text-slate-600 {
+    color: #475569 !important;
+}
+
+#prestashift-app .ps-text-slate-500 {
+    color: #64748b !important;
+}
+
+#prestashift-app .ps-text-blue-600 {
+    color: #2563eb !important;
+}
+
+#prestashift-app .ps-text-blue-900 {
+    color: #1e3a8a !important;
+}
+
+#prestashift-app .ps-text-red-600 {
+    color: #dc2626 !important;
+}
+
+#prestashift-app .ps-space-y-6>*+* {
+    margin-top: 1.5rem !important;
+}
+
+#prestashift-app .ps-space-y-4>*+* {
+    margin-top: 1rem !important;
+}
+
+#prestashift-app .ps-space-y-2>*+* {
+    margin-top: 0.5rem !important;
+}
+
+#prestashift-app .ps-space-y-1>*+* {
+    margin-top: 0.25rem !important;
+}
+
+/* --- COMPONENT: CARD (Scoped) --- */
+#prestashift-app .ps-card {
+    background-color: white !important;
+    color: #0f172a !important;
+    border-radius: 0.5rem !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+    overflow: hidden !important;
+    margin-bottom: 24px !important;
+}
+
+#prestashift-app .ps-p-4 {
+    padding: 1rem !important;
+}
+
+#prestashift-app .ps-p-6 {
+    padding: 1.5rem !important;
+}
+
+#prestashift-app .ps-p-8 {
+    padding: 2rem !important;
+}
+
+#prestashift-app .ps-bg-blue-50 {
+    background-color: #eff6ff !important;
+}
+
+#prestashift-app .ps-border-blue-200 {
+    border-color: #bfdbfe !important;
+}
+
+#prestashift-app .ps-bg-red-50 {
+    background-color: #fef2f2 !important;
+}
+
+#prestashift-app .ps-border-red-200 {
+    border-color: #fecaca !important;
+}
+
+#prestashift-app .ps-bg-amber-50 {
+    background-color: #fffbeb !important;
+}
+
+#prestashift-app .ps-border-amber-400 {
+    border-color: #fbbf24 !important;
+    border-width: 2px !important;
+}
+
+#prestashift-app .ps-bg-slate-50 {
+    background-color: #f8fafc !important;
+}
+
+/* --- COMPONENT: INPUT (Scoped + Important to override Bootstrap) --- */
+#prestashift-app .ps-input {
+    display: block !important;
+    width: 100% !important;
+    height: 44px !important;
+    padding: 8px 12px !important;
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+    color: #0f172a !important;
+    background-color: #f3f3f5 !important;
+    /* User requested gray #f3f3f5 */
+    background-image: none !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 6px !important;
+    box-shadow: none !important;
+    transition: all 0.2s !important;
+}
+
+#prestashift-app .ps-input:focus {
+    border-color: #94a3b8 !important;
+    /* Darker gray border */
+    outline: none !important;
+    box-shadow: 0 0 0 3px #cbd5e1 !important;
+    /* Thick gray ring */
+    background-color: #f3f3f5 !important;
+    /* User requested keeping gray bg */
+}
+
+/* --- COMPONENT: BUTTON (Scoped) --- */
+#prestashift-app .ps-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
+    border-radius: 6px !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    transition: all 0.2s !important;
+    height: 2.5rem !important;
+    /* h-10 */
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
+    cursor: pointer !important;
+    border: 1px solid transparent !important;
+    text-decoration: none !important;
+    background-image: none !important;
+    box-shadow: none !important;
+}
+
+#prestashift-app .ps-btn-lg {
+    height: 2.75rem !important;
+    /* h-11 */
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+    font-size: 0.95rem !important;
+}
+
+#prestashift-app .ps-btn-primary {
+    background-color: #0f172a !important;
+    color: white !important;
+    border-color: transparent !important;
+}
+
+#prestashift-app .ps-btn-primary:hover {
+    background-color: #1e293b !important;
+}
+
+#prestashift-app .ps-btn-outline {
+    border: 1px solid #e2e8f0 !important;
+    background-color: white !important;
+    color: #0f172a !important;
+}
+
+#prestashift-app .ps-btn-outline:hover {
+    background-color: #f1f5f9 !important;
+}
+
+/* --- COMPONENT: STEPPER (Scoped + Flex Fix) --- */
+#prestashift-app .ps-stepper-container {
+    max-width: 48rem !important;
+    margin: 0 auto 3rem auto !important;
+    width: 100% !important;
+}
+
+#prestashift-app .ps-stepper-flex {
+    display: flex !important;
+    flex-direction: row !important;
+    /* Force horizontal */
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 0 !important;
+}
+
+#prestashift-app .ps-step-item {
+    flex: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+    flex-direction: row !important;
+}
+
+#prestashift-app .ps-step-item:last-child {
+    flex: none !important;
+}
+
+#prestashift-app .ps-step-content {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    position: relative !important;
+    z-index: 10 !important;
+    background: transparent !important;
+}
+
+#prestashift-app .ps-step-circle {
+    width: 3rem !important;
+    height: 3rem !important;
+    border-radius: 0.5rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-weight: 600 !important;
+    font-size: 0.875rem !important;
+    transition: all 0.3s !important;
+    background-color: #e2e8f0 !important;
+    color: #64748b !important;
+    border: none !important;
+}
+
+#prestashift-app .ps-step-active .ps-step-circle {
+    background-color: #2563eb !important;
+    color: white !important;
+    box-shadow: 0 0 0 4px #dbeafe !important;
+}
+
+#prestashift-app .ps-step-completed .ps-step-circle {
+    background-color: #2563eb !important;
+    color: white !important;
+}
+
+#prestashift-app .ps-step-label {
+    margin-top: 0.5rem !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    text-align: center !important;
+    color: #64748b !important;
+}
+
+#prestashift-app .ps-step-active .ps-step-label,
+#prestashift-app .ps-step-completed .ps-step-label {
+    color: #0f172a !important;
+}
+
+#prestashift-app .ps-step-line {
+    flex: 1 !important;
+    height: 2px !important;
+    margin: 0 1rem !important;
+    margin-top: -1.5rem !important;
+    background-color: #e2e8f0 !important;
+    display: block !important;
+}
+
+#prestashift-app .ps-step-line-active {
+    background-color: #2563eb !important;
+}
+
+/* --- COMPONENT: CHECKBOX (Scoped + Row Fix) --- */
+#prestashift-app .ps-checkbox-wrapper {
+    display: flex !important;
+    flex-direction: row !important;
+    /* Force row */
+    align-items: flex-start !important;
+    gap: 12px !important;
+    cursor: pointer !important;
+    width: 100% !important;
+    margin-bottom: 0 !important;
+}
+
+#prestashift-app .ps-checkbox-input {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    width: 16px !important;
+    height: 16px !important;
+    border: 1px solid #0f172a !important;
+    border-radius: 4px !important;
+    background: white !important;
+    margin: 3px 0 0 0 !important;
+    /* margin-top 3px matches gap */
+    cursor: pointer !important;
+    flex-shrink: 0 !important;
+    display: grid !important;
+    place-content: center !important;
+}
+
+#prestashift-app .ps-checkbox-input::before {
+    content: "" !important;
+    width: 10px !important;
+    height: 10px !important;
+    transform: scale(0) !important;
+    transition: 120ms transform ease-in-out !important;
+    box-shadow: inset 1em 1em white !important;
+    transform-origin: center !important;
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%) !important;
+}
+
+#prestashift-app .ps-checkbox-input:checked {
+    background-color: #0f172a !important;
+    border-color: #0f172a !important;
+}
+
+#prestashift-app .ps-checkbox-input:checked::before {
+    transform: scale(1) !important;
+}
+
+/* --- COMPONENT: SWITCH (Scoped) --- */
+#prestashift-app .ps-switch-label {
+    position: relative !important;
+    display: inline-block !important;
+    width: 2rem !important;
+    height: 1.15rem !important;
+}
+
+#prestashift-app .ps-switch-input {
+    opacity: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    position: absolute !important;
+}
+
+#prestashift-app .ps-switch-slider {
+    position: absolute !important;
+    cursor: pointer !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    background-color: #cbced4 !important;
+    transition: .3s !important;
+    border-radius: 99px !important;
+}
+
+#prestashift-app .ps-switch-slider:before {
+    position: absolute !important;
+    content: "" !important;
+    height: 0.9rem !important;
+    width: 0.9rem !important;
+    left: 2px !important;
+    bottom: 2px !important;
+    background-color: white !important;
+    transition: .3s !important;
+    border-radius: 50% !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+}
+
+#prestashift-app .ps-switch-input:checked+.ps-switch-slider {
+    background-color: #0f172a !important;
+}
+
+#prestashift-app .ps-switch-input:checked+.ps-switch-slider:before {
+    transform: translateX(1.1rem) !important;
+}
+
+/* --- UTILS (Scoped) --- */
+#prestashift-app .ps-grid-2 {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 20px !important;
+}
+
+#prestashift-app .ps-flex-between {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+}
+
+#prestashift-app .ps-flex-start {
+    display: flex !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+}
+
+#prestashift-app .ps-gap-2 {
+    gap: 8px !important;
+}
+
+#prestashift-app .ps-gap-3 {
+    gap: 12px !important;
+}
+
+#prestashift-app .ps-rounded-md {
+    border-radius: 6px !important;
+}
+
+#prestashift-app .ps-option-row {
+    padding: 16px !important;
+    border-radius: 8px !important;
+    transition: background-color 0.2s !important;
+}
+
+#prestashift-app .ps-option-row:hover {
+    background-color: #f8fafc !important;
+}
+
+#prestashift-app .ps-badge {
+    display: inline-flex !important;
+    align-items: center !important;
+    border-radius: 9999px !important;
+    padding: 4px 12px !important;
+    /* INCREASED PADDING */
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    color: white !important;
+    background-color: #f59e0b !important;
+    line-height: 1 !important;
+}
+
+/* --- COMPONENT: PROGRESS BAR (Scoped) --- */
+#prestashift-app .ps-progress-track {
+    height: 12px !important;
+    background: #f1f5f9 !important;
+    border-radius: 99px !important;
+    overflow: hidden !important;
+    position: relative !important;
+}
+
+#prestashift-app .ps-progress-fill {
+    height: 100% !important;
+    background: #2563eb !important;
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    border-radius: 99px !important;
+}
+
+/* --- COMPONENT: TERMINAL LOG (Scoped) --- */
+#prestashift-app .ps-terminal {
+    background: #0f172a !important;
+    border: 1px solid #1e293b !important;
+    border-radius: 8px !important;
+    padding: 16px !important;
+    color: #94a3b8 !important;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace !important;
+    font-size: 12px !important;
+    line-height: 1.6 !important;
+    height: 300px !important;
+    overflow-y: auto !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+#prestashift-app .ps-terminal::-webkit-scrollbar {
+    width: 8px !important;
+}
+
+#prestashift-app .ps-terminal::-webkit-scrollbar-track {
+    background: #0f172a !important;
+}
+
+#prestashift-app .ps-terminal::-webkit-scrollbar-thumb {
+    background: #334155 !important;
+    border-radius: 4px !important;
+}
+
+#prestashift-app .ps-terminal-line {
+    display: flex !important;
+    gap: 8px !important;
+    margin-bottom: 4px !important;
+}
+
+#prestashift-app .ps-terminal-msg {
+    color: #e2e8f0 !important;
+}
+
+#prestashift-app .ps-terminal-time {
+    color: #64748b !important;
+    user-select: none !important;
+    min-width: 60px !important;
+}
+
+#prestashift-app .ps-opacity-50 {
+    opacity: 0.5 !important;
+}
+
+@media (max-width: 768px) {
+    #prestashift-app .ps-grid-2 {
+        grid-template-columns: 1fr !important;
+    }
+}

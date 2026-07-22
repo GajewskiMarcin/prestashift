@@ -1,0 +1,18 @@
+PrestaShift Error Report
+=========================
+
+PrestaShop Version: {prestashop_version}
+PHP Version: {php_version}
+Memory Limit: {memory_limit}
+Max Execution Time: {max_execution_time}
+Source URL: {source_url}
+Admin Contact: {admin_contact}
+
+Error Message:
+{error_message}
+
+Details:
+{error_details}
+
+Raw Debug Info:
+{debug_info}
