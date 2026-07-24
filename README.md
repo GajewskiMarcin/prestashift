@@ -110,4 +110,4 @@ Created by [marcingajewski.pl](https://marcingajewski.pl)
 
 ## License
 
-MIT
+[Academic Free License 3.0 (AFL-3.0)](LICENSE) — the standard licence for PrestaShop modules.
