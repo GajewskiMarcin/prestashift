@@ -99,6 +99,15 @@ class CleanupService
             ]);
         }
 
+        if (!empty($scope['reviews'])) {
+            $tablesToClean = array_merge($tablesToClean, [
+                'product_comment', 'product_comment_grade',
+                'product_comment_criterion', 'product_comment_criterion_lang',
+                'product_comment_criterion_product', 'product_comment_criterion_category',
+                'product_comment_usefulness', 'product_comment_report'
+            ]);
+        }
+
         foreach ($tablesToClean as $table) {
             $tableName = \_DB_PREFIX_ . $table;
             try {

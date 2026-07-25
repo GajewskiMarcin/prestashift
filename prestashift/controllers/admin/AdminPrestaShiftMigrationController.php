@@ -25,81 +25,82 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             'module_dir' => $this->module->getPathUri(),
             'controller_url' => $this->context->link->getAdminLink('AdminPrestaShiftMigration'),
             'ps_translations' => [
-                'loading' => $this->module->l('Loading...'),
-                'error' => $this->module->l('Error'),
-                'success' => $this->module->l('Success'),
-                'connection_failed' => $this->module->l('Connection failed:'),
-                'communication_error' => $this->module->l('Communication error:'),
-                'migration_completed' => $this->module->l('Migration fully completed!'),
-                'done' => $this->module->l('Done!'),
-                'waiting' => $this->module->l('Waiting'),
-                'resuming' => $this->module->l('Resuming migration from task:'),
-                'detected_interrupted' => $this->module->l('Interrupted migration detected. Task:'),
-                'offset' => $this->module->l(', Offset:'),
-                'resume_button' => $this->module->l('Resume work from this point'),
-                'reset_session' => $this->module->l('Reset / Start New'),
-                'st_old_status' => $this->module->l('Old Status (Source)'),
-                'st_new_status' => $this->module->l('New Status (Target)'),
-                'st_error_fetch' => $this->module->l('Error while fetching statuses from source.'),
-                'loading_statuses' => $this->module->l('Loading source statuses...'),
-                'none_selected' => $this->module->l('None selected'),
-                'yes_clean' => $this->module->l('Yes (Clean Install)'),
-                'no' => $this->module->l('No'),
-                'batch' => $this->module->l('Batch:'),
-                'delay' => $this->module->l('Delay:'),
-                'none' => $this->module->l('None'),
-                'images' => $this->module->l('Images:'),
-                'unknown' => $this->module->l('Unknown'),
+                'loading' => $this->module->l('Loading...', 'AdminPrestaShiftMigrationController'),
+                'error' => $this->module->l('Error', 'AdminPrestaShiftMigrationController'),
+                'success' => $this->module->l('Success', 'AdminPrestaShiftMigrationController'),
+                'connection_failed' => $this->module->l('Connection failed:', 'AdminPrestaShiftMigrationController'),
+                'communication_error' => $this->module->l('Communication error:', 'AdminPrestaShiftMigrationController'),
+                'migration_completed' => $this->module->l('Migration fully completed!', 'AdminPrestaShiftMigrationController'),
+                'done' => $this->module->l('Done!', 'AdminPrestaShiftMigrationController'),
+                'waiting' => $this->module->l('Waiting', 'AdminPrestaShiftMigrationController'),
+                'resuming' => $this->module->l('Resuming migration from task:', 'AdminPrestaShiftMigrationController'),
+                'detected_interrupted' => $this->module->l('Interrupted migration detected. Task:', 'AdminPrestaShiftMigrationController'),
+                'offset' => $this->module->l(', Offset:', 'AdminPrestaShiftMigrationController'),
+                'resume_button' => $this->module->l('Resume work from this point', 'AdminPrestaShiftMigrationController'),
+                'reset_session' => $this->module->l('Reset / Start New', 'AdminPrestaShiftMigrationController'),
+                'st_old_status' => $this->module->l('Old Status (Source)', 'AdminPrestaShiftMigrationController'),
+                'st_new_status' => $this->module->l('New Status (Target)', 'AdminPrestaShiftMigrationController'),
+                'st_error_fetch' => $this->module->l('Error while fetching statuses from source.', 'AdminPrestaShiftMigrationController'),
+                'loading_statuses' => $this->module->l('Loading source statuses...', 'AdminPrestaShiftMigrationController'),
+                'none_selected' => $this->module->l('None selected', 'AdminPrestaShiftMigrationController'),
+                'yes_clean' => $this->module->l('Yes (Clean Install)', 'AdminPrestaShiftMigrationController'),
+                'no' => $this->module->l('No', 'AdminPrestaShiftMigrationController'),
+                'batch' => $this->module->l('Batch:', 'AdminPrestaShiftMigrationController'),
+                'delay' => $this->module->l('Delay:', 'AdminPrestaShiftMigrationController'),
+                'none' => $this->module->l('None', 'AdminPrestaShiftMigrationController'),
+                'images' => $this->module->l('Images:', 'AdminPrestaShiftMigrationController'),
+                'unknown' => $this->module->l('Unknown', 'AdminPrestaShiftMigrationController'),
                 // Strings previously hardcoded in admin.js
-                'fill_all_fields' => $this->module->l('Please fill in all fields'),
-                'fill_db_fields' => $this->module->l('Please fill in host, database name, and user'),
-                'test_connection_btn' => $this->module->l('Test Connection & Continue'),
-                'testing' => $this->module->l('Testing...'),
-                'connection_error' => $this->module->l('Connection Error'),
-                'connection_check_failed' => $this->module->l('Connection Check Failed:'),
-                'preflight_running' => $this->module->l('Running pre-flight checks...'),
-                'starting_migration' => $this->module->l('Starting migration...'),
-                'migration_paused' => $this->module->l('Migration paused by user.'),
-                'transfer_complete' => $this->module->l('Data transfer complete. Running post-migration tasks...'),
-                'post_tasks_running' => $this->module->l('Running post-migration tasks...'),
-                'post_tasks_failed' => $this->module->l('Post-migration tasks failed — please clear cache manually.'),
-                'error_prefix' => $this->module->l('Error: '),
-                'network_error' => $this->module->l('Communication Error (Network/Timeout). Click Resume to retry this batch.'),
-                'confirm_clear_session' => $this->module->l('Are you sure you want to clear the saved session?'),
+                'fill_all_fields' => $this->module->l('Please fill in all fields', 'AdminPrestaShiftMigrationController'),
+                'fill_db_fields' => $this->module->l('Please fill in host, database name, and user', 'AdminPrestaShiftMigrationController'),
+                'test_connection_btn' => $this->module->l('Test Connection & Continue', 'AdminPrestaShiftMigrationController'),
+                'testing' => $this->module->l('Testing...', 'AdminPrestaShiftMigrationController'),
+                'connection_error' => $this->module->l('Connection Error', 'AdminPrestaShiftMigrationController'),
+                'connection_check_failed' => $this->module->l('Connection Check Failed:', 'AdminPrestaShiftMigrationController'),
+                'preflight_running' => $this->module->l('Running pre-flight checks...', 'AdminPrestaShiftMigrationController'),
+                'starting_migration' => $this->module->l('Starting migration...', 'AdminPrestaShiftMigrationController'),
+                'migration_paused' => $this->module->l('Migration paused by user.', 'AdminPrestaShiftMigrationController'),
+                'transfer_complete' => $this->module->l('Data transfer complete. Running post-migration tasks...', 'AdminPrestaShiftMigrationController'),
+                'post_tasks_running' => $this->module->l('Running post-migration tasks...', 'AdminPrestaShiftMigrationController'),
+                'post_tasks_failed' => $this->module->l('Post-migration tasks failed — please clear cache manually.', 'AdminPrestaShiftMigrationController'),
+                'error_prefix' => $this->module->l('Error: ', 'AdminPrestaShiftMigrationController'),
+                'network_error' => $this->module->l('Communication Error (Network/Timeout). Click Resume to retry this batch.', 'AdminPrestaShiftMigrationController'),
+                'confirm_clear_session' => $this->module->l('Are you sure you want to clear the saved session?', 'AdminPrestaShiftMigrationController'),
                 // Entity labels used in preview and report tables
-                'lbl_products' => $this->module->l('Products'),
-                'lbl_categories' => $this->module->l('Categories'),
-                'lbl_customers' => $this->module->l('Customers'),
-                'lbl_orders' => $this->module->l('Orders'),
-                'lbl_manufacturers' => $this->module->l('Manufacturers'),
-                'lbl_carriers' => $this->module->l('Carriers'),
-                'lbl_cms_pages' => $this->module->l('CMS Pages'),
-                'lbl_images' => $this->module->l('Images'),
-                'lbl_cart_rules' => $this->module->l('Cart Rules'),
+                'lbl_products' => $this->module->l('Products', 'AdminPrestaShiftMigrationController'),
+                'lbl_categories' => $this->module->l('Categories', 'AdminPrestaShiftMigrationController'),
+                'lbl_customers' => $this->module->l('Customers', 'AdminPrestaShiftMigrationController'),
+                'lbl_orders' => $this->module->l('Orders', 'AdminPrestaShiftMigrationController'),
+                'lbl_manufacturers' => $this->module->l('Manufacturers', 'AdminPrestaShiftMigrationController'),
+                'lbl_carriers' => $this->module->l('Carriers', 'AdminPrestaShiftMigrationController'),
+                'lbl_cms_pages' => $this->module->l('CMS Pages', 'AdminPrestaShiftMigrationController'),
+                'lbl_images' => $this->module->l('Images', 'AdminPrestaShiftMigrationController'),
+                'lbl_cart_rules' => $this->module->l('Cart Rules', 'AdminPrestaShiftMigrationController'),
+                'lbl_reviews' => $this->module->l('Product Reviews', 'AdminPrestaShiftMigrationController'),
                 // Task identifiers for JS
-                'customers' => $this->module->l('customers'),
-                'addresses' => $this->module->l('addresses'),
-                'categories' => $this->module->l('categories'),
-                'tax_rules' => $this->module->l('tax rules'),
-                'localization' => $this->module->l('localization'),
-                'attribute_groups' => $this->module->l('attribute groups'),
-                'attributes' => $this->module->l('attributes'),
-                'products' => $this->module->l('products'),
-                'product_attributes' => $this->module->l('combinations'),
-                'specific_prices' => $this->module->l('discounts'),
-                'manufacturers' => $this->module->l('manufacturers'),
-                'suppliers' => $this->module->l('suppliers'),
-                'features' => $this->module->l('features'),
-                'feature_values' => $this->module->l('feature values'),
-                'feature_products' => $this->module->l('feature assignment'),
-                'attachments' => $this->module->l('attachments'),
-                'cms' => $this->module->l('cms content'),
-                'images' => $this->module->l('images'),
-                'employees' => $this->module->l('employees'),
-                'cart_rules' => $this->module->l('vouchers'),
-                'messages' => $this->module->l('customer messages'),
-                'carriers' => $this->module->l('carriers'),
-                'orders' => $this->module->l('orders'),
+                'customers' => $this->module->l('customers', 'AdminPrestaShiftMigrationController'),
+                'addresses' => $this->module->l('addresses', 'AdminPrestaShiftMigrationController'),
+                'categories' => $this->module->l('categories', 'AdminPrestaShiftMigrationController'),
+                'tax_rules' => $this->module->l('tax rules', 'AdminPrestaShiftMigrationController'),
+                'localization' => $this->module->l('localization', 'AdminPrestaShiftMigrationController'),
+                'attribute_groups' => $this->module->l('attribute groups', 'AdminPrestaShiftMigrationController'),
+                'attributes' => $this->module->l('attributes', 'AdminPrestaShiftMigrationController'),
+                'products' => $this->module->l('products', 'AdminPrestaShiftMigrationController'),
+                'product_attributes' => $this->module->l('combinations', 'AdminPrestaShiftMigrationController'),
+                'specific_prices' => $this->module->l('discounts', 'AdminPrestaShiftMigrationController'),
+                'manufacturers' => $this->module->l('manufacturers', 'AdminPrestaShiftMigrationController'),
+                'suppliers' => $this->module->l('suppliers', 'AdminPrestaShiftMigrationController'),
+                'features' => $this->module->l('features', 'AdminPrestaShiftMigrationController'),
+                'feature_values' => $this->module->l('feature values', 'AdminPrestaShiftMigrationController'),
+                'feature_products' => $this->module->l('feature assignment', 'AdminPrestaShiftMigrationController'),
+                'attachments' => $this->module->l('attachments', 'AdminPrestaShiftMigrationController'),
+                'cms' => $this->module->l('cms content', 'AdminPrestaShiftMigrationController'),
+                'images' => $this->module->l('images', 'AdminPrestaShiftMigrationController'),
+                'employees' => $this->module->l('employees', 'AdminPrestaShiftMigrationController'),
+                'cart_rules' => $this->module->l('vouchers', 'AdminPrestaShiftMigrationController'),
+                'messages' => $this->module->l('customer messages', 'AdminPrestaShiftMigrationController'),
+                'carriers' => $this->module->l('carriers', 'AdminPrestaShiftMigrationController'),
+                'orders' => $this->module->l('orders', 'AdminPrestaShiftMigrationController'),
             ]
         ]);
 
@@ -241,14 +242,14 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $methodLabel = ($method === 'direct') ? 'Direct DB' : 'Bridge';
             $response = [
                 'success' => true,
-                'message' => $methodLabel . ' ' . $this->module->l('connected! Prefix detected:') . ' ' . $prefix,
+                'message' => $methodLabel . ' ' . $this->module->l('connected! Prefix detected:', 'AdminPrestaShiftMigrationController') . ' ' . $prefix,
                 'source_version' => $sourceVersion,
                 'target_version' => $targetVersion,
                 'warnings' => $warnings,
             ];
 
         } catch (\Throwable $e) {
-            $response = ['success' => false, 'message' => $this->module->l('Connection failed:') . ' ' . $e->getMessage()];
+            $response = ['success' => false, 'message' => $this->module->l('Connection failed:', 'AdminPrestaShiftMigrationController') . ' ' . $e->getMessage()];
         }
 
         $json = json_encode($response);
@@ -268,23 +269,23 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
 
         // PS 1.7 → 8 or 9
         if ($srcMajor === 1 && $tgtMajor >= 8) {
-            $warnings[] = $this->module->l('redirect_type values will be auto-converted (301→301-product, 302→302-product).');
-            $warnings[] = $this->module->l('Column id_product_redirected renamed to id_type_redirected — handled automatically.');
+            $warnings[] = $this->module->l('redirect_type values will be auto-converted (301→301-product, 302→302-product).', 'AdminPrestaShiftMigrationController');
+            $warnings[] = $this->module->l('Column id_product_redirected renamed to id_type_redirected — handled automatically.', 'AdminPrestaShiftMigrationController');
         }
 
         // PS 1.7 or 8 → 9
         if ($tgtMajor >= 9) {
-            $warnings[] = $this->module->l('PrestaShop 9 uses Symfony 6.4 — some hooks were removed. Module configurations may need manual adjustment.');
+            $warnings[] = $this->module->l('PrestaShop 9 uses Symfony 6.4 — some hooks were removed. Module configurations may need manual adjustment.', 'AdminPrestaShiftMigrationController');
         }
 
         // Same major version
         if ($srcMajor === $tgtMajor) {
-            $warnings[] = $this->module->l('Same major version detected — minimal compatibility issues expected.');
+            $warnings[] = $this->module->l('Same major version detected — minimal compatibility issues expected.', 'AdminPrestaShiftMigrationController');
         }
 
         // Downgrade warning
         if (version_compare($sourceVersion, $targetVersion, '>')) {
-            $warnings[] = $this->module->l('WARNING: Source version is newer than target. Downgrade migration may cause data loss.');
+            $warnings[] = $this->module->l('WARNING: Source version is newer than target. Downgrade migration may cause data loss.', 'AdminPrestaShiftMigrationController');
         }
 
         return $warnings;
@@ -311,7 +312,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             'label' => 'PHP memory_limit',
             'value' => $memoryLimit,
             'ok' => $memoryBytes >= 128 * 1024 * 1024,
-            'hint' => $memoryBytes < 128 * 1024 * 1024 ? $this->module->l('Recommended: 256M or higher') : '',
+            'hint' => $memoryBytes < 128 * 1024 * 1024 ? $this->module->l('Recommended: 256M or higher', 'AdminPrestaShiftMigrationController') : '',
         ];
 
         // 2. max_execution_time
@@ -320,16 +321,16 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             'label' => 'max_execution_time',
             'value' => $maxExec . 's',
             'ok' => $maxExec === 0 || $maxExec >= 30,
-            'hint' => ($maxExec > 0 && $maxExec < 30) ? $this->module->l('Recommended: 60s or higher') : '',
+            'hint' => ($maxExec > 0 && $maxExec < 30) ? $this->module->l('Recommended: 60s or higher', 'AdminPrestaShiftMigrationController') : '',
         ];
 
         // 3. Disk free space
         $freeSpace = @disk_free_space(_PS_ROOT_DIR_);
         $checks[] = [
-            'label' => $this->module->l('Free disk space'),
+            'label' => $this->module->l('Free disk space', 'AdminPrestaShiftMigrationController'),
             'value' => $freeSpace ? round($freeSpace / 1024 / 1024) . ' MB' : 'unknown',
             'ok' => $freeSpace === false || $freeSpace > 500 * 1024 * 1024,
-            'hint' => ($freeSpace && $freeSpace <= 500 * 1024 * 1024) ? $this->module->l('Low disk space — image transfer may fail') : '',
+            'hint' => ($freeSpace && $freeSpace <= 500 * 1024 * 1024) ? $this->module->l('Low disk space — image transfer may fail', 'AdminPrestaShiftMigrationController') : '',
         ];
 
         // 4. cURL available
@@ -337,16 +338,16 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             'label' => 'cURL',
             'value' => function_exists('curl_init') ? 'OK' : 'Missing',
             'ok' => function_exists('curl_init'),
-            'hint' => !function_exists('curl_init') ? $this->module->l('cURL is required for bridge connection') : '',
+            'hint' => !function_exists('curl_init') ? $this->module->l('cURL is required for bridge connection', 'AdminPrestaShiftMigrationController') : '',
         ];
 
         // 5. Target product count (is shop clean?)
         $productCount = (int)Db::getInstance()->getValue("SELECT COUNT(*) FROM `" . _DB_PREFIX_ . "product`");
         $checks[] = [
-            'label' => $this->module->l('Existing products in target'),
+            'label' => $this->module->l('Existing products in target', 'AdminPrestaShiftMigrationController'),
             'value' => $productCount,
             'ok' => true,
-            'hint' => $productCount > 0 ? $this->module->l('Consider enabling "Clean Target Data" to avoid ID conflicts') : '',
+            'hint' => $productCount > 0 ? $this->module->l('Consider enabling "Clean Target Data" to avoid ID conflicts', 'AdminPrestaShiftMigrationController') : '',
         ];
 
         $allOk = true;
@@ -400,6 +401,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                 'cms'           => "SELECT COUNT(*) as c FROM `{$prefix}cms`",
                 'images'        => "SELECT COUNT(*) as c FROM `{$prefix}image`",
                 'cart_rules'    => "SELECT COUNT(*) as c FROM `{$prefix}cart_rule`",
+                'reviews'       => "SELECT COUNT(*) as c FROM `{$prefix}product_comment`",
             ];
 
             foreach ($queries as $key => $sql) {
@@ -504,7 +506,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
 
             $response = [
                 'success' => true,
-                'message' => $this->module->l('Initialization complete. Target wiped (if selected). Starting batch...'),
+                'message' => $this->module->l('Initialization complete. Target wiped (if selected). Starting batch...', 'AdminPrestaShiftMigrationController'),
                 'next_batch' => true,
                 'state' => $state
             ];
@@ -512,7 +514,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         } catch (Throwable $e) {
             $response = [
                 'success' => false,
-                'message' => $this->module->l('Error during initialization:') . ' ' . $e->getMessage()
+                'message' => $this->module->l('Error during initialization:', 'AdminPrestaShiftMigrationController') . ' ' . $e->getMessage()
             ];
         }
         
@@ -533,27 +535,27 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         // 1. Regenerate category tree
         try {
             \Category::regenerateEntireNtree();
-            $tasks[] = ['label' => $this->module->l('Category tree regenerated'), 'ok' => true];
+            $tasks[] = ['label' => $this->module->l('Category tree regenerated', 'AdminPrestaShiftMigrationController'), 'ok' => true];
         } catch (\Throwable $e) {
-            $tasks[] = ['label' => $this->module->l('Category tree regeneration failed'), 'ok' => false, 'error' => $e->getMessage()];
+            $tasks[] = ['label' => $this->module->l('Category tree regeneration failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
         }
 
         // 2. Rebuild search index
         try {
             if (class_exists('Search')) {
                 \Search::indexation(true);
-                $tasks[] = ['label' => $this->module->l('Search index rebuilt'), 'ok' => true];
+                $tasks[] = ['label' => $this->module->l('Search index rebuilt', 'AdminPrestaShiftMigrationController'), 'ok' => true];
             }
         } catch (\Throwable $e) {
-            $tasks[] = ['label' => $this->module->l('Search index rebuild failed'), 'ok' => false, 'error' => $e->getMessage()];
+            $tasks[] = ['label' => $this->module->l('Search index rebuild failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
         }
 
         // 3. Clear Smarty cache
         try {
             \Tools::clearSmartyCache();
-            $tasks[] = ['label' => $this->module->l('Smarty cache cleared'), 'ok' => true];
+            $tasks[] = ['label' => $this->module->l('Smarty cache cleared', 'AdminPrestaShiftMigrationController'), 'ok' => true];
         } catch (\Throwable $e) {
-            $tasks[] = ['label' => $this->module->l('Smarty cache clear failed'), 'ok' => false, 'error' => $e->getMessage()];
+            $tasks[] = ['label' => $this->module->l('Smarty cache clear failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
         }
 
         // 4. Clear Symfony cache (PS 1.7+)
@@ -565,9 +567,9 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             if (is_dir($cacheDir . 'dev')) {
                 \Tools::deleteDirectory($cacheDir . 'dev', false);
             }
-            $tasks[] = ['label' => $this->module->l('Symfony cache cleared'), 'ok' => true];
+            $tasks[] = ['label' => $this->module->l('Symfony cache cleared', 'AdminPrestaShiftMigrationController'), 'ok' => true];
         } catch (\Throwable $e) {
-            $tasks[] = ['label' => $this->module->l('Symfony cache clear failed'), 'ok' => false, 'error' => $e->getMessage()];
+            $tasks[] = ['label' => $this->module->l('Symfony cache clear failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
         }
 
         // 5. Rebuild faceted search index (ps_facetedsearch / ps_layered)
@@ -575,14 +577,14 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $facetedModule = \Module::getInstanceByName('ps_facetedsearch');
             if ($facetedModule && method_exists($facetedModule, 'fullPricesIndexProcess')) {
                 $facetedModule->fullPricesIndexProcess(0, false, false);
-                $tasks[] = ['label' => $this->module->l('Faceted search price index rebuilt'), 'ok' => true];
+                $tasks[] = ['label' => $this->module->l('Faceted search price index rebuilt', 'AdminPrestaShiftMigrationController'), 'ok' => true];
             }
             if ($facetedModule && method_exists($facetedModule, 'rebuildLayeredStructure')) {
                 $facetedModule->rebuildLayeredStructure();
-                $tasks[] = ['label' => $this->module->l('Faceted search structure rebuilt'), 'ok' => true];
+                $tasks[] = ['label' => $this->module->l('Faceted search structure rebuilt', 'AdminPrestaShiftMigrationController'), 'ok' => true];
             }
         } catch (\Throwable $e) {
-            $tasks[] = ['label' => $this->module->l('Faceted search reindex failed'), 'ok' => false, 'error' => $e->getMessage()];
+            $tasks[] = ['label' => $this->module->l('Faceted search reindex failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
         }
 
         // 6. Remove orphaned product combinations (no attributes assigned)
@@ -599,18 +601,18 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                      LEFT JOIN `" . _DB_PREFIX_ . "product_attribute_combination` pac ON pa.id_product_attribute = pac.id_product_attribute
                      WHERE pac.id_attribute IS NULL"
                 );
-                $tasks[] = ['label' => sprintf($this->module->l('Removed %d orphaned combinations'), $orphaned), 'ok' => true];
+                $tasks[] = ['label' => sprintf($this->module->l('Removed %d orphaned combinations', 'AdminPrestaShiftMigrationController'), $orphaned), 'ok' => true];
             }
         } catch (\Throwable $e) {
-            $tasks[] = ['label' => $this->module->l('Orphaned combinations cleanup failed'), 'ok' => false, 'error' => $e->getMessage()];
+            $tasks[] = ['label' => $this->module->l('Orphaned combinations cleanup failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
         }
 
         // 7. Refresh product indexing flags
         try {
             \Db::getInstance()->execute("UPDATE `" . _DB_PREFIX_ . "product` SET `indexed` = 1");
-            $tasks[] = ['label' => $this->module->l('Product index flags updated'), 'ok' => true];
+            $tasks[] = ['label' => $this->module->l('Product index flags updated', 'AdminPrestaShiftMigrationController'), 'ok' => true];
         } catch (\Throwable $e) {
-            $tasks[] = ['label' => $this->module->l('Product index update failed'), 'ok' => false, 'error' => $e->getMessage()];
+            $tasks[] = ['label' => $this->module->l('Product index update failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
         }
 
         // 6. Collect final report stats from target DB
@@ -648,11 +650,11 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                     $conn, $cfg['db_prefix'], $cfg['source_url'] ?? ''
                 );
                 if ($redirectFile && file_exists($redirectFile)) {
-                    $tasks[] = ['label' => $this->module->l('Redirect map generated:') . ' ' . basename($redirectFile), 'ok' => true];
+                    $tasks[] = ['label' => $this->module->l('Redirect map generated:', 'AdminPrestaShiftMigrationController') . ' ' . basename($redirectFile), 'ok' => true];
                 }
             }
         } catch (\Throwable $e) {
-            $tasks[] = ['label' => $this->module->l('Redirect map generation failed'), 'ok' => false, 'error' => $e->getMessage()];
+            $tasks[] = ['label' => $this->module->l('Redirect map generation failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
         }
 
         $response = ['success' => true, 'tasks' => $tasks, 'report' => $report, 'redirect_file' => $redirectFile];
@@ -708,7 +710,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $response = [
                 'success' => false,
                 'next_batch' => false,
-                'message' => $this->module->l('Batch Error:') . ' ' . $e->getMessage()
+                'message' => $this->module->l('Batch Error:', 'AdminPrestaShiftMigrationController') . ' ' . $e->getMessage()
             ];
         }
         
@@ -812,7 +814,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         } catch (\Throwable $e) {
             $response = [
                 'success' => false,
-                'message' => $this->module->l('Error fetching statuses:') . ' ' . $e->getMessage()
+                'message' => $this->module->l('Error fetching statuses:', 'AdminPrestaShiftMigrationController') . ' ' . $e->getMessage()
             ];
         }
 
@@ -865,7 +867,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         } catch (\Throwable $e) {
             $response = [
                 'success' => false,
-                'message' => $this->module->l('Error fetching zones:') . ' ' . $e->getMessage()
+                'message' => $this->module->l('Error fetching zones:', 'AdminPrestaShiftMigrationController') . ' ' . $e->getMessage()
             ];
         }
 

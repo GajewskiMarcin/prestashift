@@ -330,7 +330,8 @@ var PrestaShift = {
                     var labels = {
                         products: PrestaShift.t('lbl_products'), categories: PrestaShift.t('lbl_categories'), customers: PrestaShift.t('lbl_customers'),
                         orders: PrestaShift.t('lbl_orders'), manufacturers: PrestaShift.t('lbl_manufacturers'), carriers: PrestaShift.t('lbl_carriers'),
-                        cms: PrestaShift.t('lbl_cms_pages'), images: PrestaShift.t('lbl_images'), cart_rules: PrestaShift.t('lbl_cart_rules')
+                        cms: PrestaShift.t('lbl_cms_pages'), images: PrestaShift.t('lbl_images'), cart_rules: PrestaShift.t('lbl_cart_rules'),
+                        reviews: PrestaShift.t('lbl_reviews')
                     };
                     // Map preview keys to scope keys
                     var scopeMap = {
@@ -394,7 +395,7 @@ var PrestaShift = {
                     var reportLabels = {
                         products: PrestaShift.t('lbl_products'), categories: PrestaShift.t('lbl_categories'), customers: PrestaShift.t('lbl_customers'),
                         orders: PrestaShift.t('lbl_orders'), manufacturers: PrestaShift.t('lbl_manufacturers'), cms_pages: PrestaShift.t('lbl_cms_pages'),
-                        images: PrestaShift.t('lbl_images'), carriers: PrestaShift.t('lbl_carriers')
+                        images: PrestaShift.t('lbl_images'), carriers: PrestaShift.t('lbl_carriers'), reviews: PrestaShift.t('lbl_reviews')
                     };
                     var reportScopeMap = {
                         products: 'catalog', categories: 'catalog', manufacturers: 'manufacturers',

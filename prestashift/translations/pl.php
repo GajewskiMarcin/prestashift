@@ -381,7 +381,14 @@ $translations = array(
     'Products' => 'Produkty',
     'Categories' => 'Kategorie',
     'Images' => 'Obrazy',
-    'Cart Rules' => 'Reguły koszyka'
+    'Cart Rules' => 'Reguły koszyka',
+
+    // === Product reviews (productcomments) ===
+    'Product Reviews' => 'Opinie o produktach',
+    'Reviews & ratings (productcomments module)' => 'Opinie i oceny (moduł productcomments)',
+    'Migrating product reviews (Offset: %d)...' => 'Migrowanie opinii o produktach (Przesunięcie: %d)...',
+    'Stock movements done. Starting product reviews...' => 'Ruchy magazynowe zakończone. Rozpoczynanie opinii o produktach...',
+    'Product reviews done. Starting configuration...' => 'Opinie o produktach zakończone. Rozpoczynanie konfiguracji...'
 );
 
 // Map of Phrases to Contexts (Generated from Scan)
@@ -726,6 +733,13 @@ $phraseMap = array(
     'Categories' => array('adminprestashiftmigrationcontroller'),
     'Images' => array('adminprestashiftmigrationcontroller'),
     'Cart Rules' => array('adminprestashiftmigrationcontroller'),
+
+    // === Product reviews (productcomments) ===
+    'Product Reviews' => array('scope', 'adminprestashiftmigrationcontroller'),
+    'Reviews & ratings (productcomments module)' => array('scope'),
+    'Migrating product reviews (Offset: %d)...' => array('migrationmanager'),
+    'Stock movements done. Starting product reviews...' => array('migrationmanager'),
+    'Product reviews done. Starting configuration...' => array('migrationmanager'),
 );
 
 

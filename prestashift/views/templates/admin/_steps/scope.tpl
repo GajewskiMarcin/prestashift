@@ -55,6 +55,13 @@
                             <p class="ps-text-xs ps-text-slate-500">{l s='Specific Prices & Catalog Price Rules' mod='prestashift'}</p>
                         </div>
                     </label>
+                    <label class="ps-checkbox-wrapper">
+                        <input type="checkbox" name="scope[reviews]" value="1" checked class="ps-checkbox-input" data-requires="catalog">
+                        <div>
+                            <span class="ps-font-medium ps-text-slate-900">{l s='Product Reviews' mod='prestashift'}</span>
+                            <p class="ps-text-xs ps-text-slate-500">{l s='Reviews & ratings (productcomments module)' mod='prestashift'}</p>
+                        </div>
+                    </label>
                 </div>
             </div>
 

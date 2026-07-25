@@ -38,6 +38,7 @@ class MigrationManager
         'cart_rules', 'messages', 'carriers',
         'orders', 'order_payment', 'order_slip', 'cart',
         'wishlist', 'stock_mvt',
+        'product_comments',
         'configuration'
     ];
 
@@ -83,6 +84,7 @@ class MigrationManager
         'cart'               => 'orders',
         'wishlist'           => 'customers',
         'stock_mvt'          => 'catalog',
+        'product_comments'   => 'reviews',
         'configuration'      => 'configuration',
     ];
 
@@ -735,7 +737,21 @@ class MigrationManager
                 }
                 if ($result['finished']) {
                     $this->updateSyncHistory('stock_mvt', date('Y-m-d H:i:s'));
-                    $state['current_task'] = 'configuration'; $state['offset'] = 0; $message = $this->l('Stock movements done. Starting configuration...');
+                    $state['current_task'] = 'product_comments'; $state['offset'] = 0; $message = $this->l('Stock movements done. Starting product reviews...');
+                } else { $state['offset'] += $limit; }
+                break;
+
+            // Product reviews & ratings (productcomments module)
+            case 'product_comments':
+                $step = new Steps\ProductCommentMigrationStep($conn, $prefix);
+                $result = $step->process($offset, $limit, $lastDate);
+                $message = sprintf($this->l('Migrating product reviews (Offset: %d)...'), $offset);
+                if ($result['count'] == 0 && $offset > 0) {
+                    $result['finished'] = true;
+                }
+                if ($result['finished']) {
+                    $this->updateSyncHistory('product_comments', date('Y-m-d H:i:s'));
+                    $state['current_task'] = 'configuration'; $state['offset'] = 0; $message = $this->l('Product reviews done. Starting configuration...');
                 } else { $state['offset'] += $limit; }
                 break;
 
@@ -815,6 +831,7 @@ class MigrationManager
             'cart' => 3,
             'wishlist' => 2,
             'stock_mvt' => 3,
+            'product_comments' => 3,
             'configuration' => 1
         ];
 
