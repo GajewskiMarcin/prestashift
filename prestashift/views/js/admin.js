@@ -29,6 +29,24 @@ var PrestaShift = {
         return key;
     },
 
+    // Delay (ms) to wait between batches, from the Options step.
+    // A floor of 100ms keeps the loop from hammering the server even if the
+    // user sets it very low; default 500ms when unset.
+    getDelay: function () {
+        var delay = 500;
+        if (PrestaShift.optionsData) {
+            $.each(PrestaShift.optionsData, function (i, field) {
+                if (field.name === 'options[delay]') {
+                    var v = parseInt(field.value, 10);
+                    if (!isNaN(v)) {
+                        delay = v;
+                    }
+                }
+            });
+        }
+        return delay < 100 ? 100 : delay;
+    },
+
     bindEvents: function () {
         // NOTE: btn-check-connection is handled via onclick attribute
 
@@ -625,7 +643,12 @@ var PrestaShift = {
                                 .prop('disabled', false);
                             $('#finish-later-area').css('visibility', 'visible');
                         } else {
-                            PrestaShift.runBatch(nextPayload);
+                            // Wait the configured delay before firing the next batch.
+                            // Back-to-back requests to the same admin URL trip hosting
+                            // rate limiters (429 Too Many Requests) on real servers.
+                            setTimeout(function () {
+                                PrestaShift.runBatch(nextPayload);
+                            }, PrestaShift.getDelay());
                         }
                     } else {
                         // Run post-migration tasks before showing finished screen
