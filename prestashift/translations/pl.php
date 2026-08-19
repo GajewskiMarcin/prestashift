@@ -388,7 +388,12 @@ $translations = array(
     'Reviews & ratings (productcomments module)' => 'Opinie i oceny (moduł productcomments)',
     'Migrating product reviews (Offset: %d)...' => 'Migrowanie opinii o produktach (Przesunięcie: %d)...',
     'Stock movements done. Starting product reviews...' => 'Ruchy magazynowe zakończone. Rozpoczynanie opinii o produktach...',
-    'Product reviews done. Starting configuration...' => 'Opinie o produktach zakończone. Rozpoczynanie konfiguracji...'
+    'Product reviews done. Starting configuration...' => 'Opinie o produktach zakończone. Rozpoczynanie konfiguracji...',
+
+    // === Post-migration reindex guards ===
+    'Search index skipped — large catalog, rebuild it in Shop Parameters > Search.' => 'Pominięto indeks wyszukiwania — duży katalog, przebuduj go w Parametry sklepu > Wyszukiwanie.',
+    'Faceted index skipped — large catalog, rebuild it from the Faceted Search module.' => 'Pominięto indeks fasetowy — duży katalog, przebuduj go w module Wyszukiwarka fasetowa.',
+    'Rate limit reached — waiting before retrying the batch...' => 'Osiągnięto limit tempa serwera — czekam przed ponowieniem paczki...'
 );
 
 // Map of Phrases to Contexts (Generated from Scan)
@@ -740,6 +745,9 @@ $phraseMap = array(
     'Migrating product reviews (Offset: %d)...' => array('migrationmanager'),
     'Stock movements done. Starting product reviews...' => array('migrationmanager'),
     'Product reviews done. Starting configuration...' => array('migrationmanager'),
+    'Search index skipped — large catalog, rebuild it in Shop Parameters > Search.' => array('adminprestashiftmigrationcontroller'),
+    'Faceted index skipped — large catalog, rebuild it from the Faceted Search module.' => array('adminprestashiftmigrationcontroller'),
+    'Rate limit reached — waiting before retrying the batch...' => array('adminprestashiftmigrationcontroller'),
 );
 
 

@@ -5,7 +5,7 @@
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.2.0
+ * @version   1.2.1
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -37,7 +37,7 @@ class PrestaShift extends Module
     {
         $this->name = 'prestashift';
         $this->tab = 'administration';
-        $this->version = '1.2.0';
+        $this->version = '1.2.1';
         $this->author = 'marcingajewski.pl';
         $this->need_instance = 0;
         $this->bootstrap = true;

@@ -67,36 +67,59 @@ class ConnectorClient
     {
         $params['action'] = $action;
         $params['token'] = $this->token;
+        $postFields = http_build_query($params);
 
-        $ch = curl_init($this->url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'X-PS-Connector-Token: ' . $this->token
-        ]);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        // Auto-retry on rate limiting (429/503). The migration makes many
+        // requests to the connector; a source server with a rate limiter
+        // (mod_evasive, nginx limit_req, Cloudflare, shared hosts) starts
+        // answering 429 once the threshold is crossed. Backing off a few seconds
+        // lets the limit window reset so the batch continues instead of failing.
+        $backoff = [2, 4, 8]; // seconds before each retry — ~14s total
+        $attempt = 0;
 
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        while (true) {
+            $ch = curl_init($this->url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $postFields);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'X-PS-Connector-Token: ' . $this->token
+            ]);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 
-        if ($httpCode === 403) {
-            throw new Exception("Connector Error: 403 Forbidden. Check your token.");
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($httpCode === 403) {
+                throw new Exception("Connector Error: 403 Forbidden. Check your token.");
+            }
+
+            if ($httpCode === 404) {
+                throw new Exception("Connector Error: 404 Not Found. Check your Endpoint URL.");
+            }
+
+            // Rate limit on the source server (mod_evasive, nginx limit_req,
+            // Cloudflare, shared-host limits): it answers 429/503 with an HTML
+            // error page, not JSON. Retry with backoff, then report it clearly.
+            if ($httpCode === 429 || $httpCode === 503) {
+                if ($attempt < count($backoff)) {
+                    sleep($backoff[$attempt]);
+                    $attempt++;
+                    continue;
+                }
+                throw new Exception("Connector Error: the source server is rate-limiting the connection (HTTP " . $httpCode . " Too Many Requests) and kept blocking after " . count($backoff) . " retries. Increase 'Request Delay' in the Options step, wait a minute and click Resume, or ask your hosting to relax the rate limit (mod_evasive / mod_security) or whitelist the target server's IP.");
+            }
+
+            $data = json_decode($response, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new Exception("Connector Error: Invalid JSON response. Is the URL correct? Response: " . substr($response, 0, 100));
+            }
+
+            return $data;
         }
-
-        if ($httpCode === 404) {
-            throw new Exception("Connector Error: 404 Not Found. Check your Endpoint URL.");
-        }
-
-        $data = json_decode($response, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new Exception("Connector Error: Invalid JSON response. Is the URL correct? Response: " . substr($response, 0, 100));
-        }
-
-        return $data;
     }
 
     private function requestRaw($action, $params = [])

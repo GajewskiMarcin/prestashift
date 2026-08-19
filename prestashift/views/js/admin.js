@@ -449,7 +449,7 @@ var PrestaShift = {
                 $('#migration-finished-container').show();
             },
             error: function () {
-                PrestaShift.log(PrestaShift.t('post_tasks_failed'));
+                PrestaShift.logError(PrestaShift.t('post_tasks_failed'));
                 $('#migration-progress-container').hide();
                 $('#migration-finished-container').show();
             }
@@ -657,11 +657,36 @@ var PrestaShift = {
                         PrestaShift.runPostMigration();
                     }
                 } else {
-                    PrestaShift.log(PrestaShift.t('error_prefix') + response.message);
+                    // Rate limit: the connector already retried server-side and
+                    // still got 429. Wait longer (the limit window may be
+                    // per-minute) and auto-resume the same batch — writes are
+                    // idempotent, so re-running is safe. Any other error stops.
+                    if (response.message && /\b429\b|rate-limit|too many requests/i.test(response.message)) {
+                        PrestaShift.logError(response.message);
+                        PrestaShift.log(PrestaShift.t('rate_limit_wait'));
+                        setTimeout(function () {
+                            PrestaShift.runBatch(data);
+                        }, 45000);
+                    } else {
+                        PrestaShift.logError(PrestaShift.t('error_prefix') + response.message);
+                    }
                 }
             },
             error: function (jqXHR) {
-                PrestaShift.log(PrestaShift.t('network_error'));
+                // Surface the server's real error instead of only a generic
+                // network message. On a fatal PHP error the controller returns
+                // HTTP 500 with the actual message (and file:line) in the body;
+                // without this it was thrown away and the cause stayed hidden.
+                var detail = '';
+                if (jqXHR && jqXHR.responseJSON && jqXHR.responseJSON.message) {
+                    detail = jqXHR.responseJSON.message;
+                } else if (jqXHR && typeof jqXHR.responseText === 'string' && jqXHR.responseText) {
+                    detail = jqXHR.responseText.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 400);
+                }
+                if (jqXHR && jqXHR.status) {
+                    detail = 'HTTP ' + jqXHR.status + (detail ? ' — ' + detail : '');
+                }
+                PrestaShift.logError(PrestaShift.t('network_error') + (detail ? ' [' + detail + ']' : ''));
                 PrestaShift.isPaused = true;
                 PrestaShift.pendingNextBatch = ajaxData;
 
@@ -691,6 +716,19 @@ var PrestaShift = {
         if ($container.length) {
             $container.scrollTop($container[0].scrollHeight);
         }
+    },
+
+    // Escape HTML so server-originated text (e.g. a 429 error page returned by
+    // the source host) shows as readable text instead of rendering as markup —
+    // which produced huge, dark, near-invisible text on the dark terminal.
+    escapeHtml: function (s) {
+        return $('<div>').text(s == null ? '' : String(s)).html();
+    },
+
+    // Log an error line: escaped (never rendered as HTML) and coloured so it
+    // stands out clearly against the dark log background.
+    logError: function (msg) {
+        PrestaShift.log('<span class="ps-terminal-error" style="color:#f87171;font-weight:600;">' + PrestaShift.escapeHtml(msg) + '</span>');
     },
 
     checkSavedState: function () {

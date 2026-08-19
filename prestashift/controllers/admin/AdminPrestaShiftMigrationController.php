@@ -55,6 +55,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                 'fill_db_fields' => $this->module->l('Please fill in host, database name, and user', 'AdminPrestaShiftMigrationController'),
                 'test_connection_btn' => $this->module->l('Test Connection & Continue', 'AdminPrestaShiftMigrationController'),
                 'testing' => $this->module->l('Testing...', 'AdminPrestaShiftMigrationController'),
+                'rate_limit_wait' => $this->module->l('Rate limit reached — waiting before retrying the batch...', 'AdminPrestaShiftMigrationController'),
                 'connection_error' => $this->module->l('Connection Error', 'AdminPrestaShiftMigrationController'),
                 'connection_check_failed' => $this->module->l('Connection Check Failed:', 'AdminPrestaShiftMigrationController'),
                 'preflight_running' => $this->module->l('Running pre-flight checks...', 'AdminPrestaShiftMigrationController'),
@@ -532,22 +533,44 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         ob_start();
         $tasks = [];
 
-        // 1. Regenerate category tree
-        try {
-            \Category::regenerateEntireNtree();
-            $tasks[] = ['label' => $this->module->l('Category tree regenerated', 'AdminPrestaShiftMigrationController'), 'ok' => true];
-        } catch (\Throwable $e) {
-            $tasks[] = ['label' => $this->module->l('Category tree regeneration failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
+        // Only run catalog maintenance when the catalog was actually part of
+        // this migration. Otherwise migrating just employees or customers would
+        // trigger a full reindex of a pre-existing catalog — tens of minutes on
+        // a large shop, for nothing.
+        $raw = json_decode((string) \Configuration::get('PRESTASHIFT_LAST_CONFIG'), true);
+        $config = (is_array($raw) && isset($raw['config'])) ? $raw['config'] : $raw;
+        $scope = (is_array($config) && isset($config['scope']) && is_array($config['scope'])) ? $config['scope'] : [];
+        $catalogMigrated = !empty($scope['catalog']);
+
+        // A full inline reindex of a large catalog blocks the request for many
+        // minutes and is fragile (memory, client disconnect). Above this size we
+        // skip it and tell the operator to rebuild it with the shop's own tools.
+        $productCount = (int) \Db::getInstance()->getValue("SELECT COUNT(*) FROM `" . _DB_PREFIX_ . "product`");
+        $reindexThreshold = 2000;
+        $reindexInline = $catalogMigrated && $productCount > 0 && $productCount <= $reindexThreshold;
+
+        // 1. Regenerate category tree (catalog only)
+        if ($catalogMigrated) {
+            try {
+                \Category::regenerateEntireNtree();
+                $tasks[] = ['label' => $this->module->l('Category tree regenerated', 'AdminPrestaShiftMigrationController'), 'ok' => true];
+            } catch (\Throwable $e) {
+                $tasks[] = ['label' => $this->module->l('Category tree regeneration failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
+            }
         }
 
-        // 2. Rebuild search index
-        try {
-            if (class_exists('Search')) {
-                \Search::indexation(true);
-                $tasks[] = ['label' => $this->module->l('Search index rebuilt', 'AdminPrestaShiftMigrationController'), 'ok' => true];
+        // 2. Rebuild search index (catalog only, small catalogs inline)
+        if ($reindexInline) {
+            try {
+                if (class_exists('Search')) {
+                    \Search::indexation(true);
+                    $tasks[] = ['label' => $this->module->l('Search index rebuilt', 'AdminPrestaShiftMigrationController'), 'ok' => true];
+                }
+            } catch (\Throwable $e) {
+                $tasks[] = ['label' => $this->module->l('Search index rebuild failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
             }
-        } catch (\Throwable $e) {
-            $tasks[] = ['label' => $this->module->l('Search index rebuild failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
+        } elseif ($catalogMigrated) {
+            $tasks[] = ['label' => $this->module->l('Search index skipped — large catalog, rebuild it in Shop Parameters > Search.', 'AdminPrestaShiftMigrationController'), 'ok' => true];
         }
 
         // 3. Clear Smarty cache
@@ -572,22 +595,27 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $tasks[] = ['label' => $this->module->l('Symfony cache clear failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
         }
 
-        // 5. Rebuild faceted search index (ps_facetedsearch / ps_layered)
-        try {
-            $facetedModule = \Module::getInstanceByName('ps_facetedsearch');
-            if ($facetedModule && method_exists($facetedModule, 'fullPricesIndexProcess')) {
-                $facetedModule->fullPricesIndexProcess(0, false, false);
-                $tasks[] = ['label' => $this->module->l('Faceted search price index rebuilt', 'AdminPrestaShiftMigrationController'), 'ok' => true];
+        // 5. Rebuild faceted search index (catalog only, small catalogs inline)
+        if ($reindexInline) {
+            try {
+                $facetedModule = \Module::getInstanceByName('ps_facetedsearch');
+                if ($facetedModule && method_exists($facetedModule, 'fullPricesIndexProcess')) {
+                    $facetedModule->fullPricesIndexProcess(0, false, false);
+                    $tasks[] = ['label' => $this->module->l('Faceted search price index rebuilt', 'AdminPrestaShiftMigrationController'), 'ok' => true];
+                }
+                if ($facetedModule && method_exists($facetedModule, 'rebuildLayeredStructure')) {
+                    $facetedModule->rebuildLayeredStructure();
+                    $tasks[] = ['label' => $this->module->l('Faceted search structure rebuilt', 'AdminPrestaShiftMigrationController'), 'ok' => true];
+                }
+            } catch (\Throwable $e) {
+                $tasks[] = ['label' => $this->module->l('Faceted search reindex failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
             }
-            if ($facetedModule && method_exists($facetedModule, 'rebuildLayeredStructure')) {
-                $facetedModule->rebuildLayeredStructure();
-                $tasks[] = ['label' => $this->module->l('Faceted search structure rebuilt', 'AdminPrestaShiftMigrationController'), 'ok' => true];
-            }
-        } catch (\Throwable $e) {
-            $tasks[] = ['label' => $this->module->l('Faceted search reindex failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
+        } elseif ($catalogMigrated) {
+            $tasks[] = ['label' => $this->module->l('Faceted index skipped — large catalog, rebuild it from the Faceted Search module.', 'AdminPrestaShiftMigrationController'), 'ok' => true];
         }
 
-        // 6. Remove orphaned product combinations (no attributes assigned)
+        // 6. Remove orphaned product combinations (catalog only)
+        if ($catalogMigrated) {
         try {
             $orphaned = (int)\Db::getInstance()->getValue(
                 "SELECT COUNT(*) FROM `" . _DB_PREFIX_ . "product_attribute` pa
@@ -614,6 +642,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         } catch (\Throwable $e) {
             $tasks[] = ['label' => $this->module->l('Product index update failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
         }
+        } // end catalog-only maintenance
 
         // 6. Collect final report stats from target DB
         $report = [];

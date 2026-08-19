@@ -27,8 +27,8 @@ class EmployeeMigrationStep
 
     public function process($offset, $limit, $dateFilter = null)
     {
-        // 1. Profiles (Small table, migrate at once)
-        if ($offset === 0) {
+        // 1. Profiles (small table, migrate at once)
+        if ((int) $offset === 0) {
             $this->migrateProfiles();
         }
 
@@ -39,13 +39,26 @@ class EmployeeMigrationStep
             return ['count' => 0, 'finished' => true];
         }
 
-        $currentEmployeeEmail = (isset(Context::getContext()->employee) && Context::getContext()->employee->id) 
-            ? Context::getContext()->employee->email 
-            : null;
+        $ctx = Context::getContext();
+        $currentEmployeeId = (isset($ctx->employee) && $ctx->employee->id) ? (int) $ctx->employee->id : 0;
 
         foreach ($employees as $item) {
-            // SAFETY: Do not overwrite the currently logged-in admin to prevent session loss/lockout
-            if ($currentEmployeeEmail && $item['email'] === $currentEmployeeEmail) {
+            // Never overwrite an existing target account. Employees are upserted
+            // by id_employee, so importing the source employee that sits at the
+            // logged-in admin's id would replace their e-mail and password and
+            // lock the operator out mid-migration. We also skip any source
+            // employee whose e-mail already exists in the target, to avoid
+            // clobbering / duplicating an existing account.
+            //
+            // This mirrors the reference migration modules, which likewise do
+            // not overwrite existing employees (they skip on email-exists and
+            // remap ids through a mapping table). Preserving the source admin's
+            // exact id without logging the operator out would require that same
+            // remap+mapping layer, which this module intentionally does not have.
+            if ($currentEmployeeId && (int) $item['id_employee'] === $currentEmployeeId) {
+                continue;
+            }
+            if (isset($item['email']) && \Employee::employeeExists($item['email'])) {
                 continue;
             }
             $this->importEmployee($item);
