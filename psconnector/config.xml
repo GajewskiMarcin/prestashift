@@ -2,7 +2,7 @@
 <module>
     <name>psconnector</name>
     <displayName><![CDATA[PrestaShift Connector]]></displayName>
-    <version><![CDATA[1.1.0]]></version>
+    <version><![CDATA[1.2.0]]></version>
     <description><![CDATA[Secure API endpoint for PrestaShift migration tool.]]></description>
     <author><![CDATA[Antigravity]]></author>
     <tab><![CDATA[administration]]></tab>

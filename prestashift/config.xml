@@ -2,7 +2,7 @@
 <module>
     <name>prestashift</name>
     <displayName><![CDATA[PrestaShift Migration]]></displayName>
-    <version><![CDATA[1.1.0]]></version>
+    <version><![CDATA[1.2.0]]></version>
     <description><![CDATA[Professional data migration tool for your PrestaShop. Migrate data with ease.]]></description>
     <author><![CDATA[marcingajewski.pl]]></author>
     <tab><![CDATA[administration]]></tab>
