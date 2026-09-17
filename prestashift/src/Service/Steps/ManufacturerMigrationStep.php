@@ -1,16 +1,18 @@
 <?php
 /**
  * PrestaShift Migration Module
- * 
+ *
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
 
 class ManufacturerMigrationStep
@@ -36,12 +38,14 @@ class ManufacturerMigrationStep
             return ['count' => 0, 'finished' => true];
         }
 
+        IdMapper::prepare('manufacturer', array_column($items, 'id_manufacturer'));
+
         foreach ($items as $item) {
-            $this->importManufacturer($item);
-            
-            // Image
+            $sid = (int)$item['id_manufacturer'];
+            $tid = $this->importManufacturer($item);
+
             if ($this->source_url && !$this->skip_files) {
-                $this->downloadImage($item['id_manufacturer']);
+                $this->downloadImage($sid, $tid);
             }
         }
 
@@ -57,101 +61,76 @@ class ManufacturerMigrationStep
 
     private function importManufacturer($data)
     {
-        $id = (int)$data['id_manufacturer'];
-        
-        $mainData = [
-            'id_manufacturer' => $id,
+        $sid = (int)$data['id_manufacturer'];
+        $tid = IdMapper::own('manufacturer', $sid);
+
+        SchemaHelper::upsert('manufacturer', [
+            'id_manufacturer' => $tid,
             'name' => $data['name'],
             'date_add' => $data['date_add'],
             'date_upd' => $data['date_upd'],
-            'active' => $data['active']
-        ];
-        
-        $sql = SchemaHelper::buildUpsertQuery('manufacturer', $mainData, ['id_manufacturer']);
-        if ($sql) {
-            Db::getInstance()->execute($sql);
-        }
-        
-        // Shop
-        $shopData = [
-            'id_manufacturer' => $id,
-            'id_shop' => \PrestaShift\Service\SchemaHelper::getTargetShopId(),
-        ];
-        $sqlShop = SchemaHelper::buildInsertQuery('manufacturer_shop', $shopData, true);
-        if ($sqlShop) {
-            $sqlShop = str_replace('INSERT INTO', 'INSERT IGNORE INTO', $sqlShop);
-            Db::getInstance()->execute($sqlShop);
-        }
+            'active' => $data['active'],
+        ], ['id_manufacturer']);
 
-        // Lang
-        $this->importLang($id);
+        SchemaHelper::insertIgnore('manufacturer_shop', [
+            'id_manufacturer' => $tid,
+            'id_shop' => SchemaHelper::getTargetShopId(),
+        ]);
+
+        $this->importLang($sid, $tid);
+
+        return $tid;
     }
-    
-    private function importLang($id_manufacturer)
+
+    private function importLang($sid, $tid)
     {
-        $sql = "SELECT * FROM `{$this->prefix}manufacturer_lang` WHERE id_manufacturer = $id_manufacturer";
-        $stmt = $this->db_connection->query($sql);
-        $langs = \PrestaShift\Service\LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC));
-        
+        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}manufacturer_lang` WHERE id_manufacturer = $sid");
+        $langs = LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC));
+
         foreach ($langs as $lang) {
-            $langData = [
-                'id_manufacturer' => $id_manufacturer,
-                'id_lang' => (int)$lang['id_lang'],
+            $idLang = (int)$lang['id_lang'];
+            Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "manufacturer_lang` WHERE id_manufacturer = $tid AND id_lang = $idLang");
+            SchemaHelper::insertIgnore('manufacturer_lang', [
+                'id_manufacturer' => $tid,
+                'id_lang' => $idLang,
                 'description' => $lang['description'],
                 'short_description' => $lang['short_description'],
                 'meta_title' => $lang['meta_title'],
                 'meta_keywords' => isset($lang['meta_keywords']) ? $lang['meta_keywords'] : null,
-                'meta_description' => $lang['meta_description']
-            ];
-            
-            Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "manufacturer_lang` WHERE id_manufacturer = $id_manufacturer AND id_lang = {$langData['id_lang']}");
-            
-            $sql = SchemaHelper::buildInsertQuery('manufacturer_lang', $langData, true);
-            if ($sql) {
-                Db::getInstance()->execute($sql);
-            }
+                'meta_description' => $lang['meta_description'],
+            ]);
         }
     }
-    private function downloadImage($id_manufacturer)
+
+    /**
+     * Logo is read under the source id and saved under the target id.
+     */
+    private function downloadImage($sid, $tid)
     {
         $manuDir = constant('_PS_MANU_IMG_DIR_');
-        $targetPath = $manuDir . $id_manufacturer . '.jpg';
-        
-        // CLEANUP: Delete existing main file and thumbnails to ensure no broken files stay on disk
-        if (file_exists($targetPath)) {
-            @unlink($targetPath);
-        }
+        $targetPath = $manuDir . $tid . '.jpg';
         $imagesTypes = \ImageType::getImagesTypes('manufacturers');
-        foreach ($imagesTypes as $imageType) {
-            $thumbPath = $manuDir . $id_manufacturer . '-' . stripslashes($imageType['name']) . '.jpg';
-            if (file_exists($thumbPath)) {
-                @unlink($thumbPath);
-            }
-        }
-        
-        // http://source.com/img/m/5.jpg
-        $sourceUrl = rtrim($this->source_url, '/') . "/img/m/{$id_manufacturer}.jpg";
-        
-        $content = @\Tools::file_get_contents($sourceUrl);
-        if ($content) {
-            // Validate image content before saving
-            $imageInfo = @getimagesizefromstring($content);
-            if (!$imageInfo) {
-                // Not a valid image (e.g. 404 HTML page) - leave it deleted
-                return;
-            }
 
-            file_put_contents($targetPath, $content);
-            
-            // Generate thumbnails
-            foreach ($imagesTypes as $imageType) {
-                @\ImageManager::resize(
-                    $targetPath,
-                    $manuDir . $id_manufacturer . '-' . stripslashes($imageType['name']) . '.jpg',
-                    (int)$imageType['width'],
-                    (int)$imageType['height']
-                );
-            }
+        $content = @\Tools::file_get_contents(rtrim($this->source_url, '/') . "/img/m/{$sid}.jpg");
+        if (!$content || !@getimagesizefromstring($content)) {
+            return; // no logo (or a 404 page) — keep whatever the target has
+        }
+
+        // Replace old files only once the new image is known to be valid
+        @unlink($targetPath);
+        foreach ($imagesTypes as $imageType) {
+            @unlink($manuDir . $tid . '-' . stripslashes($imageType['name']) . '.jpg');
+        }
+
+        file_put_contents($targetPath, $content);
+
+        foreach ($imagesTypes as $imageType) {
+            @\ImageManager::resize(
+                $targetPath,
+                $manuDir . $tid . '-' . stripslashes($imageType['name']) . '.jpg',
+                (int)$imageType['width'],
+                (int)$imageType['height']
+            );
         }
     }
 }

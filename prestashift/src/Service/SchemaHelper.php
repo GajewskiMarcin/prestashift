@@ -45,7 +45,11 @@ class SchemaHelper
         // though usually we know the table should exist.
         // We use executeS to get the structure.
         $sql = "SHOW COLUMNS FROM `$tableName`";
-        $result = Db::getInstance()->executeS($sql);
+        try {
+            $result = Db::getInstance()->executeS($sql);
+        } catch (\Throwable $e) {
+            $result = []; // table absent in this PrestaShop version
+        }
 
         $columns = [];
         if ($result) {
@@ -88,7 +92,7 @@ class SchemaHelper
     public static function buildInsertQuery($table, $data, $pSQL = true)
     {
         $filtered = self::filterData($table, $data);
-        
+
         if (empty($filtered)) {
             return '';
         }
@@ -160,7 +164,23 @@ class SchemaHelper
     {
         $sql = self::buildUpsertQuery($table, $data, $excludeFromUpdate);
         if (empty($sql)) return true;
-        
+
         return Db::getInstance()->execute($sql);
+    }
+
+    /**
+     * INSERT IGNORE of one row (link tables whose whole row is the key).
+     */
+    public static function insertIgnore($table, $data)
+    {
+        $sql = self::buildInsertQuery($table, $data, true);
+        if (empty($sql)) return true;
+
+        return Db::getInstance()->execute(preg_replace('/^INSERT INTO/', 'INSERT IGNORE INTO', $sql));
+    }
+
+    public static function hasTable($table)
+    {
+        return !empty(self::getTableColumns($table));
     }
 }

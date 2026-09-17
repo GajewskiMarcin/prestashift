@@ -5,12 +5,14 @@
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
 
 class CustomizationFieldMigrationStep
@@ -38,6 +40,8 @@ class CustomizationFieldMigrationStep
             return ['count' => 0, 'finished' => true];
         }
 
+        IdMapper::prepare('customization_field', array_column($items, 'id_customization_field'));
+
         foreach ($items as $item) {
             $this->importItem($item);
         }
@@ -47,37 +51,30 @@ class CustomizationFieldMigrationStep
 
     private function importItem($data)
     {
-        $id = (int)$data['id_customization_field'];
+        $sid = (int)$data['id_customization_field'];
+        $row = IdMapper::row('customization_field', $data);
+        $tid = (int)$row['id_customization_field'];
 
-        $sql = SchemaHelper::buildUpsertQuery('customization_field', $data, ['id_customization_field']);
-        if ($sql) {
-            try {
-                Db::getInstance()->execute($sql);
-            } catch (\Exception $e) {
-                // Log error
-            }
+        if ((int)$row['id_product'] <= 0) {
+            return;
         }
 
-        // Lang
-        $this->importLang($id);
-    }
+        SchemaHelper::upsert('customization_field', $row, ['id_customization_field']);
 
-    private function importLang($id)
-    {
         try {
-            $sql = "SELECT * FROM `{$this->prefix}customization_field_lang` WHERE id_customization_field = $id";
-            $rows = \PrestaShift\Service\LanguageMapper::expand($this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC));
+            $sql = "SELECT * FROM `{$this->prefix}customization_field_lang` WHERE id_customization_field = $sid ORDER BY id_lang ASC";
+            $rows = LanguageMapper::expand($this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC));
         } catch (\Exception $e) {
             return;
         }
 
-        Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "customization_field_lang` WHERE id_customization_field = $id");
+        $shopId = SchemaHelper::getTargetShopId();
+        Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "customization_field_lang` WHERE id_customization_field = $tid AND id_shop = $shopId");
 
-        foreach ($rows as $row) {
-            $sql = SchemaHelper::buildInsertQuery('customization_field_lang', $row, true);
-            if ($sql) {
-                Db::getInstance()->execute($sql);
-            }
+        foreach ($rows as $lang) {
+            $lang['id_customization_field'] = $tid;
+            $lang['id_shop'] = $shopId;
+            SchemaHelper::insertIgnore('customization_field_lang', $lang);
         }
     }
 }

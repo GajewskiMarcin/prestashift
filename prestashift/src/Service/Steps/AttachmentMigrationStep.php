@@ -1,16 +1,18 @@
 <?php
 /**
  * PrestaShift Migration Module
- * 
+ *
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
 use Tools;
 
@@ -18,6 +20,7 @@ class AttachmentMigrationStep
 {
     private $db_connection;
     private $prefix;
+    private $source_url;
     private $skip_files;
 
     public function __construct($db_connection, $prefix, $source_url = '', $skip_files = false)
@@ -36,6 +39,8 @@ class AttachmentMigrationStep
             return ['count' => 0, 'finished' => true];
         }
 
+        IdMapper::prepare('attachment', array_column($rows, 'id_attachment'));
+
         foreach ($rows as $row) {
             $this->importItem($row);
         }
@@ -51,67 +56,45 @@ class AttachmentMigrationStep
 
     private function importItem($data)
     {
-        $id = (int)$data['id_attachment'];
-        $sql = SchemaHelper::buildInsertQuery('attachment', $data);
-        if ($sql) {
-            Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "attachment` WHERE id_attachment = $id");
-            Db::getInstance()->execute($sql);
+        $sid = (int)$data['id_attachment'];
+        $row = IdMapper::row('attachment', $data);
+        $tid = (int)$row['id_attachment'];
+
+        SchemaHelper::upsert('attachment', $row, ['id_attachment']);
+
+        if (SchemaHelper::hasTable('attachment_shop')) {
+            SchemaHelper::insertIgnore('attachment_shop', ['id_attachment' => $tid, 'id_shop' => SchemaHelper::getTargetShopId()]);
         }
 
-        // Lang
-        $this->importLang($id);
-        
-        // Product Associations
-        $this->importProductAttachments($id);
-
-        // FILE DOWNLOAD
-        if ($this->source_url && !$this->skip_files) {
-            $this->downloadFile($data['file'], $data['file_name']); // file is the hash, file_name is original name
+        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}attachment_lang` WHERE id_attachment = $sid");
+        foreach (LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC)) as $lang) {
+            $lang['id_attachment'] = $tid;
+            Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "attachment_lang` WHERE id_attachment = $tid AND id_lang = " . (int)$lang['id_lang']);
+            SchemaHelper::insertIgnore('attachment_lang', $lang);
         }
-    }
 
-    private function importLang($id)
-    {
-        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}attachment_lang` WHERE id_attachment = $id");
-        $langs = \PrestaShift\Service\LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC));
-        foreach ($langs as $lang) {
-            $sql = SchemaHelper::buildInsertQuery('attachment_lang', $lang);
-            if ($sql) {
-                $sql = str_replace('INSERT INTO', 'REPLACE INTO', $sql);
-                Db::getInstance()->execute($sql);
+        $stmt = $this->db_connection->query("SELECT id_product FROM `{$this->prefix}product_attachment` WHERE id_attachment = $sid");
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $link) {
+            $idProduct = IdMapper::ref('product', (int)$link['id_product']);
+            if ($idProduct > 0) {
+                SchemaHelper::insertIgnore('product_attachment', ['id_product' => $idProduct, 'id_attachment' => $tid]);
             }
         }
-    }
-    
-    private function importProductAttachments($id_attachment)
-    {
-         $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}product_attachment` WHERE id_attachment = $id_attachment");
-         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-         foreach ($rows as $row) {
-              $sql = SchemaHelper::buildInsertQuery('product_attachment', $row);
-              if ($sql) {
-                  $sql = str_replace('INSERT INTO', 'REPLACE INTO', $sql);
-                  Db::getInstance()->execute($sql);
-              }
-         }
+
+        // Files are stored under their hash, not their id
+        if ($this->source_url && !$this->skip_files) {
+            $this->downloadFile($data['file']);
+        }
     }
 
-    private function downloadFile($fileHash, $originalName)
+    private function downloadFile($fileHash)
     {
-        // Source URL likely: http://source.com/download/fileHash
-        // Target path: _PS_DOWNLOAD_DIR_ . fileHash
-        
-        $downloadDir = constant('_PS_DOWNLOAD_DIR_');
-        $targetPath = $downloadDir . $fileHash;
-        
+        $targetPath = constant('_PS_DOWNLOAD_DIR_') . $fileHash;
         if (file_exists($targetPath)) {
-            return; // Already exists
+            return;
         }
-        
-        $downloadUrl = rtrim($this->source_url, '/') . '/download/' . $fileHash;
-        
-        // Try to fetch
-        $content = @Tools::file_get_contents($downloadUrl);
+
+        $content = @Tools::file_get_contents(rtrim($this->source_url, '/') . '/download/' . $fileHash);
         if ($content) {
             file_put_contents($targetPath, $content);
         }

@@ -1,16 +1,18 @@
 <?php
 /**
  * PrestaShift Migration Module
- * 
+ *
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
 
 class CmsMigrationStep
@@ -30,18 +32,20 @@ class CmsMigrationStep
 
     public function process($offset, $limit, $dateFilter = null)
     {
-        // Strategy: First batch (offset 0) migrates ALL CMS Categories.
-        // Then we migrate CMS Pages using offset/limit.
-        
+        // First batch migrates all CMS categories, then pages page by page
         if ($offset == 0) {
             $this->migrateCmsCategories();
         }
 
-        $cmsPages = $this->getCmsPages($offset, $limit, $dateFilter);
+        // ps_cms has no date columns — every run reads all pages; the id map
+        // turns repeated pages into updates
+        $cmsPages = $this->db_connection->query("SELECT * FROM `{$this->prefix}cms` ORDER BY `id_cms` ASC LIMIT $limit OFFSET $offset")->fetchAll(PDO::FETCH_ASSOC);
 
         if (empty($cmsPages)) {
             return ['count' => 0, 'finished' => true];
         }
+
+        IdMapper::prepare('cms', array_column($cmsPages, 'id_cms'));
 
         foreach ($cmsPages as $row) {
             $this->importCmsPage($row);
@@ -49,91 +53,74 @@ class CmsMigrationStep
 
         return ['count' => count($cmsPages), 'finished' => false];
     }
-    
+
     private function migrateCmsCategories()
     {
-        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}cms_category` ORDER BY id_cms_category ASC");
-        $cats = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        foreach ($cats as $cat) {
-            $id = (int)$cat['id_cms_category'];
-            if ($id < 1) continue; // Basic safety, but ID 1 is Root and MUST be migrated
-            // Actually checking if Root exists is good practice.
-            
-            $sql = SchemaHelper::buildInsertQuery('cms_category', $cat);
-            if ($sql) {
-                Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "cms_category` WHERE id_cms_category = $id");
-                Db::getInstance()->execute($sql);
-            }
-            
-            // Lang
-            $this->importCmsCategoryLang($id);
-            // Shop
-            Db::getInstance()->execute("REPLACE INTO `" . \_DB_PREFIX_ . "cms_category_shop` (id_cms_category, id_shop) VALUES ($id, " . \PrestaShift\Service\SchemaHelper::getTargetShopId() . ")");
-        }
-    }
-    
-    private function importCmsCategoryLang($id) {
-        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}cms_category_lang` WHERE id_cms_category = $id");
-        $rows = \PrestaShift\Service\LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC));
-        foreach ($rows as $row) {
-            $row['id_shop'] = \PrestaShift\Service\SchemaHelper::getTargetShopId();
-            $sql = SchemaHelper::buildInsertQuery('cms_category_lang', $row);
-            if ($sql) {
-                $sql = str_replace('INSERT INTO', 'REPLACE INTO', $sql);
-                Db::getInstance()->execute($sql);
-            }
-        }
-    }
+        $cats = $this->db_connection->query("SELECT * FROM `{$this->prefix}cms_category` ORDER BY id_cms_category ASC")->fetchAll(PDO::FETCH_ASSOC);
+        $shopId = SchemaHelper::getTargetShopId();
 
-    private function getCmsPages($offset, $limit, $dateFilter = null)
-    {
-        // Many PS versions don't have date_add/upd in ps_cms, it's usually in ps_cms_lang or not at all.
-        // Wait, ps_cms usually DOES have it in newer versions. Let's check or be safe.
-        // If it doesn't exist, SQL will fail. We should probably only filter if we are sure.
-        // For CMS, we can check lang if needed, but let's assume it has it or handle gracefully.
-        
-        $where = "";
-        // Note: CMS tables vary. If columns missing, this might fail. 
-        // We could wrap in try/catch or check columns, but for MVP we assume standard schema.
-        if ($dateFilter) {
-            $where = " WHERE `date_add` > '{$dateFilter}' OR `date_upd` > '{$dateFilter}' ";
+        foreach ($cats as $cat) {
+            $sid = (int)$cat['id_cms_category'];
+            if ($sid < 1) {
+                continue;
+            }
+            $tid = IdMapper::own('cms_category', $sid);
+            if (IdMapper::isLinked('cms_category', $sid)) {
+                continue; // the target's own root
+            }
+
+            $row = IdMapper::row('cms_category', $cat);
+            if ((int)$row['id_parent'] <= 0) {
+                $row['id_parent'] = 1;
+            }
+            SchemaHelper::upsert('cms_category', $row, ['id_cms_category']);
+
+            $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}cms_category_lang` WHERE id_cms_category = $sid ORDER BY id_shop ASC")->fetchAll(PDO::FETCH_ASSOC));
+            $done = [];
+            foreach ($langs as $lang) {
+                if (isset($done[(int)$lang['id_lang']])) {
+                    continue;
+                }
+                $done[(int)$lang['id_lang']] = true;
+                $lang['id_cms_category'] = $tid;
+                $lang['id_shop'] = $shopId;
+                SchemaHelper::upsert('cms_category_lang', $lang, ['id_cms_category', 'id_shop', 'id_lang']);
+            }
+
+            Db::getInstance()->execute("REPLACE INTO `" . _DB_PREFIX_ . "cms_category_shop` (id_cms_category, id_shop) VALUES ($tid, $shopId)");
         }
-        
-        $sql = "SELECT * FROM `{$this->prefix}cms` {$where} ORDER BY `id_cms` ASC LIMIT $limit OFFSET $offset";
-        $stmt = $this->db_connection->query($sql);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     private function importCmsPage($data)
     {
-        $id = (int)$data['id_cms'];
-        $sql = SchemaHelper::buildInsertQuery('cms', $data);
-        if ($sql) {
-            Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "cms` WHERE id_cms = $id");
-            Db::getInstance()->execute($sql);
+        $sid = (int)$data['id_cms'];
+        $row = IdMapper::row('cms', $data);
+        $tid = (int)$row['id_cms'];
+        if ((int)$row['id_cms_category'] <= 0) {
+            $row['id_cms_category'] = 1;
         }
 
-        // Lang
-        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}cms_lang` WHERE id_cms = $id");
-        $langs = \PrestaShift\Service\LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC));
+        SchemaHelper::upsert('cms', $row, ['id_cms']);
+
+        $shopId = SchemaHelper::getTargetShopId();
+        $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}cms_lang` WHERE id_cms = $sid ORDER BY id_shop ASC")->fetchAll(PDO::FETCH_ASSOC));
+        $done = [];
         foreach ($langs as $lang) {
-             $lang['id_shop'] = \PrestaShift\Service\SchemaHelper::getTargetShopId();
-             $sqlL = SchemaHelper::buildInsertQuery('cms_lang', $lang);
-             if ($sqlL) {
-                 $sqlL = str_replace('INSERT INTO', 'REPLACE INTO', $sqlL);
-                 Db::getInstance()->execute($sqlL);
-             }
+            if (isset($done[(int)$lang['id_lang']])) {
+                continue;
+            }
+            $done[(int)$lang['id_lang']] = true;
+            $lang['id_cms'] = $tid;
+            $lang['id_shop'] = $shopId;
+            SchemaHelper::upsert('cms_lang', $lang, ['id_cms', 'id_shop', 'id_lang']);
         }
-        
-        // Shop
-        Db::getInstance()->execute("REPLACE INTO `" . \_DB_PREFIX_ . "cms_shop` (id_cms, id_shop) VALUES ($id, " . \PrestaShift\Service\SchemaHelper::getTargetShopId() . ")");
 
-        // Download images embedded in CMS content
+        Db::getInstance()->execute("REPLACE INTO `" . _DB_PREFIX_ . "cms_shop` (id_cms, id_shop) VALUES ($tid, $shopId)");
+
+        // Images embedded in the content (stored by file name, not id)
         if (!$this->skip_files) {
             foreach ($langs as $lang) {
-                $content = isset($lang['content']) ? $lang['content'] : '';
-                $this->downloadImagesFromHtml($content);
+                $this->downloadImagesFromHtml(isset($lang['content']) ? $lang['content'] : '');
             }
         }
     }
@@ -145,7 +132,6 @@ class CmsMigrationStep
     {
         if (empty($html)) return;
 
-        // Match img src and background-image urls pointing to img/cms/
         $patterns = [
             '/src=["\'](?:https?:\/\/[^"\']*?)?(\/?)img\/cms\/([^"\']+)["\']/i',
             '/url\(["\']?(?:https?:\/\/[^"\']*?)?(\/?)img\/cms\/([^"\')\s]+)["\']?\)/i',
@@ -173,18 +159,15 @@ class CmsMigrationStep
         foreach (array_keys($files) as $filename) {
             $targetPath = $cmsImgDir . $filename;
 
-            // Create subdirectories if needed (e.g. img/cms/subdir/file.jpg)
             $dir = dirname($targetPath);
             if (!is_dir($dir)) {
                 @mkdir($dir, 0755, true);
             }
 
-            // Skip if file already exists (avoid re-downloading on repeated migrations)
             if (file_exists($targetPath)) {
                 continue;
             }
 
-            // Try bridge first, then direct HTTP
             try {
                 $fileData = $this->db_connection->getFile('img/cms/' . $filename);
                 if ($fileData) {
@@ -193,7 +176,6 @@ class CmsMigrationStep
                 }
             } catch (\Exception $e) {}
 
-            // Fallback: direct HTTP from source URL
             if ($this->source_url) {
                 try {
                     $fileData = @file_get_contents($this->source_url . '/img/cms/' . $filename);

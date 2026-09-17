@@ -1,16 +1,18 @@
 <?php
 /**
  * PrestaShift Migration Module
- * 
+ *
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
 
 class AttributeGroupMigrationStep
@@ -32,6 +34,8 @@ class AttributeGroupMigrationStep
             return ['count' => 0, 'finished' => true];
         }
 
+        IdMapper::prepare('attribute_group', array_column($rows, 'id_attribute_group'));
+
         foreach ($rows as $row) {
             $this->importItem($row);
         }
@@ -47,34 +51,27 @@ class AttributeGroupMigrationStep
 
     private function importItem($data)
     {
-        $id = (int)$data['id_attribute_group'];
-        $sql = SchemaHelper::buildInsertQuery('attribute_group', $data);
-        if ($sql) {
-            Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "attribute_group` WHERE id_attribute_group = $id");
-            Db::getInstance()->execute($sql);
-        }
+        $sid = (int)$data['id_attribute_group'];
+        $row = IdMapper::row('attribute_group', $data);
+        $tid = (int)$row['id_attribute_group'];
 
-        // Lang
-        $this->importLang($id);
-        
-        // Shop
-        Db::getInstance()->execute("REPLACE INTO `" . \_DB_PREFIX_ . "attribute_group_shop` (id_attribute_group, id_shop) VALUES ($id, " . \PrestaShift\Service\SchemaHelper::getTargetShopId() . ")");
+        SchemaHelper::upsert('attribute_group', $row, ['id_attribute_group']);
+
+        $this->importLang($sid, $tid);
+
+        Db::getInstance()->execute("REPLACE INTO `" . _DB_PREFIX_ . "attribute_group_shop` (id_attribute_group, id_shop) VALUES ($tid, " . SchemaHelper::getTargetShopId() . ")");
     }
 
-    private function importLang($id)
+    private function importLang($sid, $tid)
     {
-        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}attribute_group_lang` WHERE id_attribute_group = $id");
-        $langs = \PrestaShift\Service\LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC));
+        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}attribute_group_lang` WHERE id_attribute_group = $sid");
+        $langs = LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC));
 
         foreach ($langs as $lang) {
-            // Force target shop
-            $lang['id_shop'] = \PrestaShift\Service\SchemaHelper::getTargetShopId();
-            
-            $sql = SchemaHelper::buildInsertQuery('attribute_group_lang', $lang);
-            if ($sql) {
-                 Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "attribute_group_lang` WHERE id_attribute_group = $id AND id_lang = " . (int)$lang['id_lang']);
-                 Db::getInstance()->execute($sql);
-            }
+            $lang['id_attribute_group'] = $tid;
+            $lang['id_shop'] = SchemaHelper::getTargetShopId();
+            Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "attribute_group_lang` WHERE id_attribute_group = $tid AND id_lang = " . (int)$lang['id_lang']);
+            SchemaHelper::insertIgnore('attribute_group_lang', $lang);
         }
     }
 }

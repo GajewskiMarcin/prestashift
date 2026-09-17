@@ -5,12 +5,14 @@
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
 
 class TagMigrationStep
@@ -46,45 +48,43 @@ class TagMigrationStep
             $stmt = $this->db_connection->query($sql);
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (\Exception $e) {
-            // Table may not exist in old PS versions
             return [];
         }
     }
 
+    /**
+     * Tags are shared words: a tag with the same name and language already in
+     * the target is reused, not duplicated.
+     */
     private function importTag($data)
     {
-        $id = (int)$data['id_tag'];
-
-        $sql = SchemaHelper::buildUpsertQuery('tag', $data, ['id_tag']);
-
-        if ($sql) {
-            try {
-                Db::getInstance()->execute($sql);
-            } catch (\Exception $e) {
-                // Log error
-            }
+        $sid = (int)$data['id_tag'];
+        $lang = LanguageMapper::toTarget($data['id_lang']);
+        if (!$lang) {
+            return; // language absent in the target
         }
 
-        // Product tag associations
-        $this->importProductTags($id);
+        $tid = IdMapper::own('tag', $sid, ['name' => $data['name'], 'id_lang' => $data['id_lang']]);
+
+        if (!IdMapper::isLinked('tag', $sid)) {
+            SchemaHelper::upsert('tag', ['id_tag' => $tid, 'id_lang' => $lang, 'name' => $data['name']], ['id_tag']);
+        }
+
+        $this->importProductTags($sid, $tid, $lang);
     }
 
-    private function importProductTags($id_tag)
+    private function importProductTags($sid, $tid, $lang)
     {
         try {
-            $sql = "SELECT * FROM `{$this->prefix}product_tag` WHERE id_tag = $id_tag";
-            $rows = $this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+            $rows = $this->db_connection->query("SELECT id_product FROM `{$this->prefix}product_tag` WHERE id_tag = $sid")->fetchAll(PDO::FETCH_ASSOC);
         } catch (\Exception $e) {
             return;
         }
 
-        Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "product_tag` WHERE id_tag = $id_tag");
-
         foreach ($rows as $row) {
-            $sqlIns = SchemaHelper::buildInsertQuery('product_tag', $row, true);
-            if ($sqlIns) {
-                $sqlIns = str_replace('INSERT INTO', 'INSERT IGNORE INTO', $sqlIns);
-                Db::getInstance()->execute($sqlIns);
+            $idProduct = IdMapper::ref('product', (int)$row['id_product']);
+            if ($idProduct > 0) {
+                SchemaHelper::insertIgnore('product_tag', ['id_product' => $idProduct, 'id_tag' => $tid, 'id_lang' => $lang]);
             }
         }
     }

@@ -29,7 +29,7 @@
                             </div>
                             <div>
                                 <label class="ps-font-medium ps-text-slate-900" style="color: #7f1d1d; cursor: pointer;" for="opt-clean-target">{l s='Clean Target Data' mod='prestashift'}</label>
-                                <p class="ps-text-sm" style="color: #b91c1c;">{l s='REQUIRED for ID Preservation. Deletes existing data!' mod='prestashift'}</p>
+                                <p class="ps-text-sm" style="color: #b91c1c;">{l s='Deletes the data of the selected areas in this shop first, then keeps the source IDs 1:1. Off: migrated data is added next to the existing data, with new IDs.' mod='prestashift'}</p>
                             </div>
                         </div>
                         <label class="ps-switch-label">
@@ -63,18 +63,6 @@
                     </label>
                 </div>
                 
-                {* Force ID Preservation (Legacy but Critical) *}
-                <div class="ps-option-row ps-flex-between">
-                     <div>
-                         <label class="ps-font-medium ps-text-slate-900">{l s='Force ID Preservation' mod='prestashift'}</label>
-                         <p class="ps-text-sm ps-text-slate-500">{l s='Keep original product and category IDs' mod='prestashift'}</p>
-                    </div>
-                     <label class="ps-switch-label">
-                        <input type="checkbox" name="options[force_ids]" value="1" checked class="ps-switch-input">
-                        <span class="ps-switch-slider"></span>
-                    </label>
-                </div>
-
                 {* Target Shop ID (Multistore) *}
                 <div class="ps-option-row ps-flex-between">
                     <div>

@@ -1,16 +1,16 @@
 <?php
 /**
  * PrestaShift Migration Module
- * 
+ *
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
-use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\SchemaHelper;
 
 class MessageMigrationStep
@@ -26,21 +26,21 @@ class MessageMigrationStep
 
     public function process($offset, $limit, $dateFilter = null)
     {
-         // We migrate by Customer Thread to keep data consistent
-         // 1. Get Threads
-         $threads = $this->getCustomerThreads($offset, $limit, $dateFilter);
-         
-         if (empty($threads)) {
-             return ['count' => 0, 'finished' => true];
-         }
-         
-         foreach ($threads as $thread) {
-             $this->importThread($thread);
-         }
-         
-         return ['count' => count($threads), 'finished' => false];
+        $threads = $this->getCustomerThreads($offset, $limit, $dateFilter);
+
+        if (empty($threads)) {
+            return ['count' => 0, 'finished' => true];
+        }
+
+        IdMapper::prepare('customer_thread', array_column($threads, 'id_customer_thread'));
+
+        foreach ($threads as $thread) {
+            $this->importThread($thread);
+        }
+
+        return ['count' => count($threads), 'finished' => false];
     }
-    
+
     private function getCustomerThreads($offset, $limit, $dateFilter = null)
     {
         $where = "";
@@ -51,32 +51,24 @@ class MessageMigrationStep
         $stmt = $this->db_connection->query($sql);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
-    
-    private function importThread($data) {
-        $id_thread = (int)$data['id_customer_thread'];
-        
-        // Clean
-        $data['id_shop'] = \PrestaShift\Service\SchemaHelper::getTargetShopId();
-        
-        // Upsert Thread
-        $sql = SchemaHelper::buildUpsertQuery('customer_thread', $data, ['id_customer_thread']);
-        if ($sql) {
-            Db::getInstance()->execute($sql);
-            
-            // Import Messages for this Thread
-            $this->importMessages($id_thread);
+
+    private function importThread($data)
+    {
+        $row = IdMapper::row('customer_thread', $data);
+
+        // A thread of a customer that is not in the target would be shown under
+        // no one — skip it. Guest threads (no customer) are kept.
+        if ((int)$data['id_customer'] > 0 && (int)$row['id_customer'] <= 0) {
+            return;
         }
-    }
-    
-    private function importMessages($id_thread) {
-        $sql = "SELECT * FROM `{$this->prefix}customer_message` WHERE id_customer_thread = $id_thread";
-        $messages = $this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC);
-        
+
+        if (!SchemaHelper::upsert('customer_thread', $row, ['id_customer_thread'])) {
+            return;
+        }
+
+        $messages = $this->db_connection->query("SELECT * FROM `{$this->prefix}customer_message` WHERE id_customer_thread = " . (int)$data['id_customer_thread'])->fetchAll(PDO::FETCH_ASSOC);
         foreach ($messages as $msg) {
-             $sql = SchemaHelper::buildUpsertQuery('customer_message', $msg, ['id_customer_message']);
-             if ($sql) {
-                 Db::getInstance()->execute($sql);
-             }
+            SchemaHelper::upsert('customer_message', IdMapper::row('customer_message', $msg), ['id_customer_message']);
         }
     }
 }

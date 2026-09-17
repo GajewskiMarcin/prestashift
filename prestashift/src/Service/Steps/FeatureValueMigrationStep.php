@@ -1,16 +1,18 @@
 <?php
 /**
  * PrestaShift Migration Module
- * 
+ *
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
 
 class FeatureValueMigrationStep
@@ -34,6 +36,8 @@ class FeatureValueMigrationStep
             return ['count' => 0, 'finished' => true];
         }
 
+        IdMapper::prepare('feature_value', array_column($items, 'id_feature_value'));
+
         foreach ($items as $item) {
             $this->importValue($item);
         }
@@ -43,45 +47,30 @@ class FeatureValueMigrationStep
 
     private function importValue($data)
     {
-        $id = (int)$data['id_feature_value'];
-        $id_feature = (int)$data['id_feature'];
-        $custom = (int)$data['custom'];
-        
-        $mainData = [
-            'id_feature_value' => $id,
-            'id_feature' => $id_feature,
-            'custom' => $custom
-        ];
-        
-        $sql = SchemaHelper::buildInsertQuery('feature_value', $mainData, true);
-        if ($sql) {
-            $sql .= " ON DUPLICATE KEY UPDATE custom = VALUES(custom)";
-            Db::getInstance()->execute($sql);
+        $sid = (int)$data['id_feature_value'];
+        $row = IdMapper::row('feature_value', [
+            'id_feature_value' => $sid,
+            'id_feature' => $data['id_feature'],
+            'custom' => (int)$data['custom'],
+        ]);
+        if ((int)$row['id_feature'] <= 0) {
+            return;
         }
-        
-        // Lang
-        $this->importLang($id);
-    }
-    
-    private function importLang($id_value)
-    {
-        $sql = "SELECT * FROM `{$this->prefix}feature_value_lang` WHERE id_feature_value = $id_value";
-        $stmt = $this->db_connection->query($sql);
-        $langs = \PrestaShift\Service\LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC));
-        
+        $tid = (int)$row['id_feature_value'];
+
+        SchemaHelper::upsert('feature_value', $row, ['id_feature_value']);
+
+        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}feature_value_lang` WHERE id_feature_value = $sid");
+        $langs = LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC));
+
         foreach ($langs as $lang) {
-            $langData = [
-                'id_feature_value' => $id_value,
-                'id_lang' => (int)$lang['id_lang'],
-                'value' => $lang['value']
-            ];
-            
-            Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "feature_value_lang` WHERE id_feature_value = $id_value AND id_lang = {$langData['id_lang']}");
-            
-            $sql = SchemaHelper::buildInsertQuery('feature_value_lang', $langData, true);
-            if ($sql) {
-                Db::getInstance()->execute($sql);
-            }
+            $idLang = (int)$lang['id_lang'];
+            Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "feature_value_lang` WHERE id_feature_value = $tid AND id_lang = $idLang");
+            SchemaHelper::insertIgnore('feature_value_lang', [
+                'id_feature_value' => $tid,
+                'id_lang' => $idLang,
+                'value' => $lang['value'],
+            ]);
         }
     }
 }

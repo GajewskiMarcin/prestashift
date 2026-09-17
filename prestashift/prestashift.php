@@ -5,7 +5,7 @@
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.2.1
+ * @version   1.3.0
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -37,7 +37,7 @@ class PrestaShift extends Module
     {
         $this->name = 'prestashift';
         $this->tab = 'administration';
-        $this->version = '1.2.1';
+        $this->version = '1.3.0';
         $this->author = 'marcingajewski.pl';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -53,9 +53,17 @@ class PrestaShift extends Module
 
     public function install()
     {
-        return parent::install() &&
-            $this->installTab();
+        if (!parent::install() || !$this->installTab()) {
+            return false;
+        }
+        \PrestaShift\Service\IdMapper::ensureTables();
+
+        return true;
     }
+
+    // The id map tables are kept on uninstall on purpose: removing the module
+    // to reinstall a newer version must not lose which source record became
+    // which target record — later Delta runs would duplicate everything.
 
     public function uninstall()
     {

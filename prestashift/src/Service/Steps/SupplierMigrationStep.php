@@ -1,16 +1,18 @@
 <?php
 /**
  * PrestaShift Migration Module
- * 
+ *
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
 
 class SupplierMigrationStep
@@ -33,6 +35,8 @@ class SupplierMigrationStep
             return ['count' => 0, 'finished' => true];
         }
 
+        IdMapper::prepare('supplier', array_column($items, 'id_supplier'));
+
         foreach ($items as $item) {
             $this->importSupplier($item);
         }
@@ -42,27 +46,19 @@ class SupplierMigrationStep
 
     private function importSupplier($data)
     {
-        $id = (int)$data['id_supplier'];
-        
-        $sql = SchemaHelper::buildUpsertQuery('supplier', $data, ['id_supplier']);
-        if ($sql) {
-            Db::getInstance()->execute($sql);
-            
-            // Lang
-            $this->importLang($id);
-            // Shop
-            Db::getInstance()->execute("REPLACE INTO `" . \_DB_PREFIX_ . "supplier_shop` (id_supplier, id_shop) VALUES ($id, " . \PrestaShift\Service\SchemaHelper::getTargetShopId() . ")");
+        $sid = (int)$data['id_supplier'];
+        $row = IdMapper::row('supplier', $data);
+        $tid = (int)$row['id_supplier'];
+
+        SchemaHelper::upsert('supplier', $row, ['id_supplier']);
+
+        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}supplier_lang` WHERE id_supplier = $sid");
+        foreach (LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC)) as $lang) {
+            $lang['id_supplier'] = $tid;
+            Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "supplier_lang` WHERE id_supplier = $tid AND id_lang = " . (int)$lang['id_lang']);
+            SchemaHelper::insertIgnore('supplier_lang', $lang);
         }
-    }
-    
-    private function importLang($id)
-    {
-        $sql = "SELECT * FROM `{$this->prefix}supplier_lang` WHERE id_supplier = $id";
-        $rows = \PrestaShift\Service\LanguageMapper::expand($this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC));
-        foreach ($rows as $row) {
-            Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "supplier_lang` WHERE id_supplier = $id AND id_lang = " . (int)$row['id_lang']);
-            $sql = SchemaHelper::buildInsertQuery('supplier_lang', $row);
-            if ($sql) Db::getInstance()->execute($sql);
-        }
+
+        Db::getInstance()->execute("REPLACE INTO `" . _DB_PREFIX_ . "supplier_shop` (id_supplier, id_shop) VALUES ($tid, " . SchemaHelper::getTargetShopId() . ")");
     }
 }

@@ -1,18 +1,25 @@
 <?php
 /**
  * PrestaShift Migration Module
- * 
+ *
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
 
+/**
+ * Taxes and tax rules groups. A tax (same name and rate) or a group (same
+ * name) already present in the target is reused as it is — its rules are the
+ * target's business. Everything else is added.
+ */
 class TaxRulesMigrationStep
 {
     private $db_connection;
@@ -26,91 +33,71 @@ class TaxRulesMigrationStep
 
     public function process($offset, $limit, $dateFilter = null)
     {
-        // We really should migrate Taxes first, then Tax Rules Groups, then Tax Rules.
-        // But since this is a looped process, we might do it all in one go or split.
-        // Let's do a simple approach: First batch handles ALL taxes (usually few), 
-        // subsequent batches handle Rules Groups.
-        
         if ($offset == 0) {
             $this->migrateTaxes();
         }
 
-        $rows = $this->getData($offset, $limit);
+        $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}tax_rules_group` ORDER BY id_tax_rules_group ASC LIMIT $limit OFFSET $offset")->fetchAll(PDO::FETCH_ASSOC);
 
         if (empty($rows)) {
             return ['count' => 0, 'finished' => true];
         }
 
         foreach ($rows as $row) {
-            $this->importItem($row);
+            $this->importGroup($row);
         }
 
         return ['count' => count($rows), 'finished' => false];
     }
-    
+
     private function migrateTaxes()
     {
-        // ps_tax
-        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}tax`");
-        $taxes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $taxes = $this->db_connection->query("SELECT * FROM `{$this->prefix}tax`")->fetchAll(PDO::FETCH_ASSOC);
+
         foreach ($taxes as $tax) {
-            $id = (int)$tax['id_tax'];
-            $sql = SchemaHelper::buildInsertQuery('tax', $tax);
-            if ($sql) {
-                Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "tax` WHERE id_tax = $id");
-                Db::getInstance()->execute($sql);
+            $sid = (int)$tax['id_tax'];
+            $tid = IdMapper::own('tax', $sid);
+            if (IdMapper::isLinked('tax', $sid)) {
+                continue;
             }
-            
-            // Lang
-            $stmtL = $this->db_connection->query("SELECT * FROM `{$this->prefix}tax_lang` WHERE id_tax = $id");
-            $langs = \PrestaShift\Service\LanguageMapper::expand($stmtL->fetchAll(PDO::FETCH_ASSOC));
+
+            $tax['id_tax'] = $tid;
+            SchemaHelper::upsert('tax', $tax, ['id_tax']);
+
+            $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}tax_lang` WHERE id_tax = $sid")->fetchAll(PDO::FETCH_ASSOC));
             foreach ($langs as $lang) {
-                // Ensure id_lang matches or map it
-                $sqlL = SchemaHelper::buildInsertQuery('tax_lang', $lang);
-                if ($sqlL) {
-                     $sqlL = str_replace('INSERT INTO', 'REPLACE INTO', $sqlL);
-                     Db::getInstance()->execute($sqlL);
-                }
+                $lang['id_tax'] = $tid;
+                SchemaHelper::upsert('tax_lang', $lang, ['id_tax', 'id_lang']);
             }
         }
     }
 
-    private function getData($offset, $limit)
+    private function importGroup($data)
     {
-        // We iterate over Tax Rules Groups
-        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}tax_rules_group` ORDER BY id_tax_rules_group ASC LIMIT $limit OFFSET $offset");
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    private function importItem($data)
-    {
-        $id = (int)$data['id_tax_rules_group'];
-        $sql = SchemaHelper::buildInsertQuery('tax_rules_group', $data);
-        if ($sql) {
-            Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "tax_rules_group` WHERE id_tax_rules_group = $id");
-            Db::getInstance()->execute($sql);
+        $sid = (int)$data['id_tax_rules_group'];
+        $tid = IdMapper::own('tax_rules_group', $sid);
+        if (IdMapper::isLinked('tax_rules_group', $sid)) {
+            return;
         }
-        
-        // Shop
-        Db::getInstance()->execute("REPLACE INTO `" . \_DB_PREFIX_ . "tax_rules_group_shop` (id_tax_rules_group, id_shop) VALUES ($id, " . \PrestaShift\Service\SchemaHelper::getTargetShopId() . ")");
 
-        // Rules
-        $this->importRules($id);
-    }
-    
-    private function importRules($id_group)
-    {
-        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}tax_rule` WHERE id_tax_rules_group = $id_group");
-        $rules = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "tax_rule` WHERE id_tax_rules_group = $id_group");
-        
+        $data['id_tax_rules_group'] = $tid;
+        SchemaHelper::upsert('tax_rules_group', $data, ['id_tax_rules_group']);
+
+        Db::getInstance()->execute("REPLACE INTO `" . _DB_PREFIX_ . "tax_rules_group_shop` (id_tax_rules_group, id_shop) VALUES ($tid, " . SchemaHelper::getTargetShopId() . ")");
+
+        $rules = $this->db_connection->query("SELECT * FROM `{$this->prefix}tax_rule` WHERE id_tax_rules_group = $sid")->fetchAll(PDO::FETCH_ASSOC);
+
+        Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "tax_rule` WHERE id_tax_rules_group = $tid");
+
         foreach ($rules as $rule) {
-            // Need to map country/state IDs? Ideally yes, but scope is same shop likely.
-            // Assumption: Zone/Country IDs are same or standard.
-            
-            $sql = SchemaHelper::buildInsertQuery('tax_rule', $rule);
-            if ($sql) Db::getInstance()->execute($sql);
+            $row = IdMapper::row('tax_rule', $rule);
+            if ((int)$row['id_country'] <= 0 || ((int)$rule['id_tax'] > 0 && (int)$row['id_tax'] <= 0)) {
+                continue; // country or tax unknown in the target
+            }
+            if ((int)$rule['id_state'] > 0 && (int)$row['id_state'] <= 0) {
+                continue;
+            }
+            SchemaHelper::upsert('tax_rule', $row, ['id_tax_rule']);
         }
     }
 }

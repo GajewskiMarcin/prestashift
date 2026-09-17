@@ -348,7 +348,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             'label' => $this->module->l('Existing products in target', 'AdminPrestaShiftMigrationController'),
             'value' => $productCount,
             'ok' => true,
-            'hint' => $productCount > 0 ? $this->module->l('Consider enabling "Clean Target Data" to avoid ID conflicts', 'AdminPrestaShiftMigrationController') : '',
+            'hint' => $productCount > 0 ? $this->module->l('Existing data is kept — migrated records get new IDs. Enable "Clean Target Data" to keep the source IDs 1:1.', 'AdminPrestaShiftMigrationController') : '',
         ];
 
         $allOk = true;
@@ -487,15 +487,25 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         }
 
         try {
-            // 2. Cleanup if requested
+            // 2. Id map. Every migrated record gets its target id from the
+            // persisted map: source id + a per-entity offset fixed at the first
+            // migration (the target's MAX id then), reused by later runs.
+            \PrestaShift\Service\IdMapper::ensureTables();
+
+            $manager = new \PrestaShift\Service\MigrationManager();
+            $sourceConn = $manager->getConnection($config);
+            $config['id_source'] = \PrestaShift\Service\IdMapper::fingerprint(
+                $sourceConn,
+                $config['db_prefix'],
+                $config['source_url']
+            );
+
+            // 3. Cleanup if requested. Emptied tables also lose their map
+            // entries, so their offsets restart at 0 and ids come out 1:1.
             if (!empty($config['options']['clean_target'])) {
-                // Warning: CleanupService might use DB service? checking...
                 $cleanup = new \PrestaShift\Service\CleanupService();
                 $cleanup->cleanTargetShop($config['scope']);
             }
-
-            // 3. Initialize Manager
-            $manager = new \PrestaShift\Service\MigrationManager();
             
             // CLEAR PREVIOUS SAVED STATE if this is a fresh start
             \Configuration::updateValue('PRESTASHIFT_MIGRATION_STATE', '');
@@ -671,10 +681,12 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             if (!$savedState) {
                 $savedState = json_decode(\Configuration::get('PRESTASHIFT_LAST_CONFIG'), true);
             }
-            if ($savedState && isset($savedState['config'])) {
-                $cfg = $savedState['config'];
+            // LAST_CONFIG holds the config itself; a saved state wraps it
+            $cfg = (is_array($savedState) && isset($savedState['config'])) ? $savedState['config'] : $savedState;
+            if (is_array($cfg) && isset($cfg['db_prefix'])) {
                 $manager = new \PrestaShift\Service\MigrationManager();
                 $conn = $manager->getConnection($cfg);
+                \PrestaShift\Service\IdMapper::begin($conn, $cfg['db_prefix'], $cfg);
                 $redirectFile = \PrestaShift\Service\RedirectMapService::generate(
                     $conn, $cfg['db_prefix'], $cfg['source_url'] ?? ''
                 );

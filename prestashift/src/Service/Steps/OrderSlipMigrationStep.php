@@ -5,12 +5,13 @@
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\SchemaHelper;
 
 class OrderSlipMigrationStep
@@ -36,6 +37,8 @@ class OrderSlipMigrationStep
             return ['count' => 0, 'finished' => true];
         }
 
+        IdMapper::prepare('order_slip', array_column($slips, 'id_order_slip'));
+
         foreach ($slips as $slip) {
             $this->importSlip($slip);
         }
@@ -56,36 +59,31 @@ class OrderSlipMigrationStep
 
     private function importSlip($data)
     {
-        $id_order_slip = (int)$data['id_order_slip'];
-
-        $sql = SchemaHelper::buildUpsertQuery('order_slip', $data, ['id_order_slip']);
-        if ($sql) {
-            try {
-                Db::getInstance()->execute($sql);
-            } catch (\Exception $e) {
-                // Log
-            }
+        if (IdMapper::find('order', (int)$data['id_order']) <= 0) {
+            return; // order not migrated
         }
 
-        $this->importSlipDetails($id_order_slip);
-    }
+        $row = IdMapper::row('order_slip', $data);
+        $tid = (int)$row['id_order_slip'];
 
-    private function importSlipDetails($id_order_slip)
-    {
+        if (!SchemaHelper::upsert('order_slip', $row, ['id_order_slip'])) {
+            return;
+        }
+
         try {
-            $sql = "SELECT * FROM `{$this->prefix}order_slip_detail` WHERE id_order_slip = $id_order_slip";
-            $rows = $this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC);
-
-            Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "order_slip_detail` WHERE id_order_slip = $id_order_slip");
-
-            foreach ($rows as $row) {
-                $sql = SchemaHelper::buildInsertQuery('order_slip_detail', $row, true);
-                if ($sql) {
-                    Db::getInstance()->execute($sql);
-                }
-            }
+            $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}order_slip_detail` WHERE id_order_slip = " . (int)$data['id_order_slip'])->fetchAll(PDO::FETCH_ASSOC);
         } catch (\Exception $e) {
-            // Table may not exist in old PS versions
+            return;
+        }
+
+        Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "order_slip_detail` WHERE id_order_slip = $tid");
+
+        foreach ($rows as $r) {
+            $trow = IdMapper::row('order_slip_detail', $r);
+            if ((int)$trow['id_order_detail'] <= 0) {
+                continue;
+            }
+            SchemaHelper::insertIgnore('order_slip_detail', $trow);
         }
     }
 }

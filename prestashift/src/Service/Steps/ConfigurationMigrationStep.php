@@ -5,13 +5,14 @@
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
-use Db;
 use PDO;
-use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LanguageMapper;
+use PrestaShift\Service\LogService;
 
 class ConfigurationMigrationStep
 {
@@ -63,6 +64,15 @@ class ConfigurationMigrationStep
         'PS_TAX', 'PS_TAX_DISPLAY', 'PS_PRICE_ROUND_MODE',
     ];
 
+    /** Keys whose value is a record id — translated, never copied */
+    private static $idKeys = [
+        'PS_SHOP_COUNTRY_ID' => 'country',
+        'PS_COUNTRY_DEFAULT' => 'country',
+        'PS_SHOP_STATE_ID' => 'state',
+        'PS_CURRENCY_DEFAULT' => 'currency',
+        'PS_LANG_DEFAULT' => 'lang',
+    ];
+
     public function __construct($db_connection, $prefix)
     {
         $this->db_connection = $db_connection;
@@ -71,69 +81,75 @@ class ConfigurationMigrationStep
 
     public function process($offset, $limit, $dateFilter = null)
     {
-        // One-shot migration
+        $keysIn = implode("','", array_map('pSQL', self::$safeKeys));
+
         try {
-            $keysIn = implode("','", array_map('pSQL', self::$safeKeys));
-            $sql = "SELECT * FROM `{$this->prefix}configuration` WHERE `name` IN ('{$keysIn}')";
-            $rows = $this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+            // The shop-independent value first; one value per key
+            $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}configuration` WHERE `name` IN ('{$keysIn}')
+                ORDER BY (`id_shop` IS NULL) DESC, (`id_shop_group` IS NULL) DESC, `id_configuration` ASC")->fetchAll(PDO::FETCH_ASSOC);
         } catch (\Exception $e) {
             return ['count' => 0, 'finished' => true];
         }
 
+        $seen = [];
         $imported = 0;
         foreach ($rows as $row) {
-            $this->importConfig($row);
-            $imported++;
-        }
-
-        // Also migrate configuration_lang entries
-        try {
-            $sql = "SELECT cl.* FROM `{$this->prefix}configuration_lang` cl
-                    JOIN `{$this->prefix}configuration` c ON c.id_configuration = cl.id_configuration
-                    WHERE c.`name` IN ('{$keysIn}')";
-            $langRows = \PrestaShift\Service\LanguageMapper::expand($this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC));
-
-            foreach ($langRows as $langRow) {
-                $this->importConfigLang($langRow);
+            if (isset($seen[$row['name']])) {
+                continue;
             }
-        } catch (\Exception $e) {
-            // configuration_lang may not exist or no lang values
+            $seen[$row['name']] = (int)$row['id_configuration'];
+            if ($this->importConfig($row['name'], $row['value'])) {
+                $imported++;
+            }
         }
+
+        $this->importConfigLang(array_flip($seen));
 
         return ['count' => $imported, 'finished' => true];
     }
 
-    private function importConfig($data)
+    private function importConfig($name, $value)
     {
-        $name = pSQL($data['name']);
-        $value = pSQL($data['value'], true);
-
-        // Use PrestaShop Configuration API for safety
-        try {
-            \Configuration::updateValue($name, $data['value']);
-        } catch (\Exception $e) {
-            // Fallback: direct SQL
-            $shopId = SchemaHelper::getTargetShopId();
-            $sql = "UPDATE `" . _DB_PREFIX_ . "configuration` SET `value` = '{$value}', `date_upd` = NOW()
-                    WHERE `name` = '{$name}'";
-            Db::getInstance()->execute($sql);
+        if (isset(self::$idKeys[$name])) {
+            $entity = self::$idKeys[$name];
+            $translated = $entity === 'lang' ? LanguageMapper::toTarget((int)$value) : IdMapper::ref($entity, (int)$value);
+            if ((int)$value > 0 && (int)$translated <= 0) {
+                LogService::getInstance()->warning("Configuration $name not migrated: value #$value has no counterpart in the target.");
+                return false;
+            }
+            $value = (int)$translated;
         }
+
+        return (bool)\Configuration::updateValue($name, $value);
     }
 
-    private function importConfigLang($data)
+    /**
+     * Multilingual values. Configuration ids differ between shops, so values
+     * are written by key name and target language.
+     *
+     * @param array $keysById source id_configuration => name
+     */
+    private function importConfigLang(array $keysById)
     {
-        try {
-            $idConfig = (int)$data['id_configuration'];
-            $idLang = (int)$data['id_lang'];
-            $value = pSQL($data['value'], true);
+        if (empty($keysById)) {
+            return;
+        }
 
-            // Find matching config ID in target by looking up the parent config name
-            $sql = "UPDATE `" . _DB_PREFIX_ . "configuration_lang`
-                    SET `value` = '{$value}', `date_upd` = NOW()
-                    WHERE `id_configuration` = {$idConfig} AND `id_lang` = {$idLang}";
-            Db::getInstance()->execute($sql);
+        try {
+            $rows = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}configuration_lang`
+                WHERE id_configuration IN (" . implode(',', array_map('intval', array_keys($keysById))) . ")")->fetchAll(PDO::FETCH_ASSOC));
         } catch (\Exception $e) {
-            // Skip silently
+            return;
+        }
+
+        $values = [];
+        foreach ($rows as $row) {
+            $name = $keysById[(int)$row['id_configuration']];
+            $values[$name][(int)$row['id_lang']] = $row['value'];
+        }
+
+        foreach ($values as $name => $byLang) {
+            \Configuration::updateValue($name, $byLang, true);
         }
     }
 

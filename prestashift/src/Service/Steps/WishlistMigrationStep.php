@@ -5,12 +5,13 @@
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\SchemaHelper;
 
 class WishlistMigrationStep
@@ -26,6 +27,10 @@ class WishlistMigrationStep
 
     public function process($offset, $limit, $dateFilter = null)
     {
+        if (!SchemaHelper::hasTable('wishlist')) {
+            return ['count' => 0, 'finished' => true]; // wishlist module not installed in the target
+        }
+
         try {
             $items = $this->getData($offset, $limit);
         } catch (\Exception $e) {
@@ -35,6 +40,8 @@ class WishlistMigrationStep
         if (empty($items)) {
             return ['count' => 0, 'finished' => true];
         }
+
+        IdMapper::prepare('wishlist', array_column($items, 'id_wishlist'));
 
         foreach ($items as $item) {
             $this->importWishlist($item);
@@ -52,43 +59,33 @@ class WishlistMigrationStep
 
     private function importWishlist($data)
     {
-        $id = (int)$data['id_wishlist'];
-
-        // Force shop ID if field exists
-        if (array_key_exists('id_shop', $data)) {
-            $data['id_shop'] = \PrestaShift\Service\SchemaHelper::getTargetShopId();
+        $row = IdMapper::row('wishlist', $data);
+        if ((int)$row['id_customer'] <= 0) {
+            return;
         }
+        $tid = (int)$row['id_wishlist'];
 
-        $sql = SchemaHelper::buildUpsertQuery('wishlist', $data, ['id_wishlist']);
-
-        if ($sql) {
-            try {
-                Db::getInstance()->execute($sql);
-            } catch (\Exception $e) {
-                // Log error
-            }
-        }
-
-        // Wishlist products
-        $this->importWishlistProducts($id);
-    }
-
-    private function importWishlistProducts($id_wishlist)
-    {
         try {
-            $sql = "SELECT * FROM `{$this->prefix}wishlist_product` WHERE id_wishlist = $id_wishlist";
-            $rows = $this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+            SchemaHelper::upsert('wishlist', $row, ['id_wishlist']);
         } catch (\Exception $e) {
             return;
         }
 
-        Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "wishlist_product` WHERE id_wishlist = $id_wishlist");
+        try {
+            $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}wishlist_product` WHERE id_wishlist = " . (int)$data['id_wishlist'])->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Exception $e) {
+            return;
+        }
 
-        foreach ($rows as $row) {
-            $sqlIns = SchemaHelper::buildInsertQuery('wishlist_product', $row, true);
-            if ($sqlIns) {
-                Db::getInstance()->execute($sqlIns);
+        Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "wishlist_product` WHERE id_wishlist = $tid");
+
+        foreach ($rows as $r) {
+            $trow = IdMapper::row('wishlist_product', $r);
+            if ((int)$trow['id_product'] <= 0) {
+                continue;
             }
+            unset($trow['id_wishlist_product']); // own auto-increment key
+            SchemaHelper::insertIgnore('wishlist_product', $trow);
         }
     }
 }

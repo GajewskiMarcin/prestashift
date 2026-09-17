@@ -5,12 +5,13 @@
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\SchemaHelper;
 
 class PackMigrationStep
@@ -27,7 +28,7 @@ class PackMigrationStep
     public function process($offset, $limit, $dateFilter = null)
     {
         try {
-            $sql = "SELECT * FROM `{$this->prefix}pack` ORDER BY id_product_pack ASC, id_product_item ASC LIMIT $limit OFFSET $offset";
+            $sql = "SELECT * FROM `{$this->prefix}pack` ORDER BY id_product_pack ASC, id_product_item ASC, id_product_attribute_item ASC LIMIT $limit OFFSET $offset";
             $stmt = $this->db_connection->query($sql);
             $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (\Exception $e) {
@@ -39,22 +40,17 @@ class PackMigrationStep
         }
 
         foreach ($items as $item) {
-            $this->importItem($item);
+            $row = IdMapper::row('pack', $item);
+            if ((int)$row['id_product_pack'] <= 0 || (int)$row['id_product_item'] <= 0) {
+                continue;
+            }
+            if (isset($item['id_product_attribute_item']) && (int)$item['id_product_attribute_item'] > 0 && (int)$row['id_product_attribute_item'] <= 0) {
+                continue; // combination of the item not migrated
+            }
+            // Quantity may have changed since the last run
+            SchemaHelper::upsert('pack', $row, ['id_product_pack', 'id_product_item', 'id_product_attribute_item']);
         }
 
         return ['count' => count($items), 'finished' => false];
-    }
-
-    private function importItem($data)
-    {
-        $sql = SchemaHelper::buildInsertQuery('pack', $data, true);
-        if ($sql) {
-            $sql = str_replace('INSERT INTO', 'INSERT IGNORE INTO', $sql);
-            try {
-                Db::getInstance()->execute($sql);
-            } catch (\Exception $e) {
-                // Log error
-            }
-        }
     }
 }

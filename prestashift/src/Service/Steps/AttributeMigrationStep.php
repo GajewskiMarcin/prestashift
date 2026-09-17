@@ -1,16 +1,18 @@
 <?php
 /**
  * PrestaShift Migration Module
- * 
+ *
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
 
 class AttributeMigrationStep
@@ -32,6 +34,8 @@ class AttributeMigrationStep
             return ['count' => 0, 'finished' => true];
         }
 
+        IdMapper::prepare('attribute', array_column($rows, 'id_attribute'));
+
         foreach ($rows as $row) {
             $this->importItem($row);
         }
@@ -47,35 +51,30 @@ class AttributeMigrationStep
 
     private function importItem($data)
     {
-        $id = (int)$data['id_attribute'];
-        $sql = SchemaHelper::buildInsertQuery('attribute', $data);
-        if ($sql) {
-            Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "attribute` WHERE id_attribute = $id");
-            Db::getInstance()->execute($sql);
+        $sid = (int)$data['id_attribute'];
+        $row = IdMapper::row('attribute', $data);
+        $tid = (int)$row['id_attribute'];
+
+        if ((int)$row['id_attribute_group'] <= 0) {
+            return; // group missing in the source — a value without a group breaks the combinations page
         }
 
-        // Lang
-        $this->importLang($id);
-        
-        // Shop
-        Db::getInstance()->execute("REPLACE INTO `" . \_DB_PREFIX_ . "attribute_shop` (id_attribute, id_shop) VALUES ($id, " . \PrestaShift\Service\SchemaHelper::getTargetShopId() . ")");
+        SchemaHelper::upsert('attribute', $row, ['id_attribute']);
+
+        $this->importLang($sid, $tid);
+
+        Db::getInstance()->execute("REPLACE INTO `" . _DB_PREFIX_ . "attribute_shop` (id_attribute, id_shop) VALUES ($tid, " . SchemaHelper::getTargetShopId() . ")");
     }
 
-    private function importLang($id)
+    private function importLang($sid, $tid)
     {
-        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}attribute_lang` WHERE id_attribute = $id");
-        $langs = \PrestaShift\Service\LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC));
+        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}attribute_lang` WHERE id_attribute = $sid");
+        $langs = LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC));
 
         foreach ($langs as $lang) {
-             // Force shop 1 (PS 1.7+ attribute_lang doesn't always have id_shop, but PS 8+ might?)
-             // SchemaHelper will filter out id_shop if target table doesn't have it, or we add it if missing in source but needed.
-             // Usually attribute_lang has no id_shop, attribute_shop does. Allow SchemaHelper to decide based on target schema.
-            
-            $sql = SchemaHelper::buildInsertQuery('attribute_lang', $lang);
-            if ($sql) {
-                 Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "attribute_lang` WHERE id_attribute = $id AND id_lang = " . (int)$lang['id_lang']);
-                 Db::getInstance()->execute($sql);
-            }
+            $lang['id_attribute'] = $tid;
+            Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "attribute_lang` WHERE id_attribute = $tid AND id_lang = " . (int)$lang['id_lang']);
+            SchemaHelper::insertIgnore('attribute_lang', $lang);
         }
     }
 }

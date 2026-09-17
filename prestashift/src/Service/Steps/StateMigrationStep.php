@@ -5,14 +5,18 @@
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
-use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\SchemaHelper;
 
+/**
+ * States / regions: matched by ISO code within their country, added only when
+ * the target lacks them.
+ */
 class StateMigrationStep
 {
     private $db_connection;
@@ -26,14 +30,10 @@ class StateMigrationStep
 
     public function process($offset, $limit, $dateFilter = null)
     {
-        // One-shot migration — all states migrated at offset=0
         if ($offset == 0) {
             try {
-                $rows = $this->db_connection->query(
-                    "SELECT * FROM `{$this->prefix}state` ORDER BY `id_state` ASC"
-                )->fetchAll(PDO::FETCH_ASSOC);
+                $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}state` ORDER BY `id_state` ASC")->fetchAll(PDO::FETCH_ASSOC);
             } catch (\Exception $e) {
-                // Table may not exist in old PS versions
                 return ['count' => 0, 'finished' => true];
             }
 
@@ -47,14 +47,23 @@ class StateMigrationStep
 
     private function importState($data)
     {
-        $sql = SchemaHelper::buildUpsertQuery('state', $data, ['id_state']);
+        $sid = (int)$data['id_state'];
+        IdMapper::own('state', $sid);
+        if (IdMapper::isLinked('state', $sid)) {
+            return;
+        }
 
-        if ($sql) {
-            try {
-                Db::getInstance()->execute($sql);
-            } catch (\Exception $e) {
-                // Log error
-            }
+        $row = IdMapper::row('state', $data);
+        if ((int)$row['id_country'] <= 0) {
+            return;
+        }
+        if ((int)$row['id_zone'] <= 0) {
+            $row['id_zone'] = (int)\Db::getInstance()->getValue("SELECT id_zone FROM `" . _DB_PREFIX_ . "country` WHERE id_country = " . (int)$row['id_country'], false);
+        }
+
+        try {
+            SchemaHelper::upsert('state', $row, ['id_state']);
+        } catch (\Exception $e) {
         }
     }
 }

@@ -14,7 +14,9 @@ use Db;
 class RedirectMapService
 {
     /**
-     * Generate redirect map comparing source URLs with target URLs
+     * Generate redirect map comparing source URLs with target URLs.
+     * Source and target records are paired through the id map (their ids may
+     * differ). IdMapper::begin() must have been called for the migration.
      * Returns path to generated file
      */
     public static function generate($sourceConn, $sourcePrefix, $sourceDomain)
@@ -54,7 +56,7 @@ class RedirectMapService
 
             $lines[] = "# --- Products ---";
             foreach ($sourceProducts as $sp) {
-                $id = (int)$sp['id_product'];
+                $id = IdMapper::find('product', (int)$sp['id_product']);
                 $oldSlug = $sp['link_rewrite'];
                 $newSlug = isset($targetMap[$id]) ? $targetMap[$id] : null;
                 if ($newSlug && $oldSlug !== $newSlug) {
@@ -93,7 +95,7 @@ class RedirectMapService
             $lines[] = "";
             $lines[] = "# --- Categories ---";
             foreach ($sourceCategories as $sc) {
-                $id = (int)$sc['id_category'];
+                $id = IdMapper::find('category', (int)$sc['id_category']);
                 $oldSlug = $sc['link_rewrite'];
                 $newSlug = isset($targetMap[$id]) ? $targetMap[$id] : null;
                 if ($newSlug && $oldSlug !== $newSlug) {
@@ -130,7 +132,7 @@ class RedirectMapService
             $lines[] = "";
             $lines[] = "# --- CMS Pages ---";
             foreach ($sourceCms as $sc) {
-                $id = (int)$sc['id_cms'];
+                $id = IdMapper::find('cms', (int)$sc['id_cms']);
                 $oldSlug = $sc['link_rewrite'];
                 $newSlug = isset($targetMap[$id]) ? $targetMap[$id] : null;
                 if ($newSlug && $oldSlug !== $newSlug) {

@@ -5,12 +5,14 @@
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
 
 class ContactMigrationStep
@@ -29,11 +31,8 @@ class ContactMigrationStep
         // One-shot migration — small data set
         if ($offset == 0) {
             try {
-                $rows = $this->db_connection->query(
-                    "SELECT * FROM `{$this->prefix}contact` ORDER BY `id_contact` ASC"
-                )->fetchAll(PDO::FETCH_ASSOC);
+                $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}contact` ORDER BY `id_contact` ASC")->fetchAll(PDO::FETCH_ASSOC);
             } catch (\Exception $e) {
-                // Table may not exist in old PS versions
                 return ['count' => 0, 'finished' => true];
             }
 
@@ -47,49 +46,23 @@ class ContactMigrationStep
 
     private function importContact($data)
     {
-        $id = (int)$data['id_contact'];
+        $sid = (int)$data['id_contact'];
+        $row = IdMapper::row('contact', $data);
+        $tid = (int)$row['id_contact'];
 
-        $sql = SchemaHelper::buildUpsertQuery('contact', $data, ['id_contact']);
+        SchemaHelper::upsert('contact', $row, ['id_contact']);
 
-        if ($sql) {
-            try {
-                Db::getInstance()->execute($sql);
-            } catch (\Exception $e) {
-                // Log error
-            }
-        }
-
-        // Lang
-        $this->importContactLang($id);
-
-        // Shop association
-        $shopData = [
-            'id_contact' => $id,
-            'id_shop' => \PrestaShift\Service\SchemaHelper::getTargetShopId(),
-        ];
-        $sqlShop = SchemaHelper::buildInsertQuery('contact_shop', $shopData, true);
-        if ($sqlShop) {
-            $sqlShop = str_replace('INSERT INTO', 'INSERT IGNORE INTO', $sqlShop);
-            Db::getInstance()->execute($sqlShop);
-        }
-    }
-
-    private function importContactLang($id_contact)
-    {
         try {
-            $sql = "SELECT * FROM `{$this->prefix}contact_lang` WHERE id_contact = $id_contact";
-            $rows = \PrestaShift\Service\LanguageMapper::expand($this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC));
+            $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}contact_lang` WHERE id_contact = $sid")->fetchAll(PDO::FETCH_ASSOC));
         } catch (\Exception $e) {
-            return;
+            $langs = [];
+        }
+        Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "contact_lang` WHERE id_contact = $tid");
+        foreach ($langs as $lang) {
+            $lang['id_contact'] = $tid;
+            SchemaHelper::insertIgnore('contact_lang', $lang);
         }
 
-        Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "contact_lang` WHERE id_contact = $id_contact");
-
-        foreach ($rows as $row) {
-            $sqlIns = SchemaHelper::buildInsertQuery('contact_lang', $row, true);
-            if ($sqlIns) {
-                Db::getInstance()->execute($sqlIns);
-            }
-        }
+        SchemaHelper::insertIgnore('contact_shop', ['id_contact' => $tid, 'id_shop' => SchemaHelper::getTargetShopId()]);
     }
 }

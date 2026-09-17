@@ -1,15 +1,14 @@
 <?php
 /**
  * PrestaShift Migration Module
- * 
+ *
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service;
 
-use Configuration;
 use Tools;
 
 class ImageTransferService
@@ -22,53 +21,44 @@ class ImageTransferService
     }
 
     /**
-     * Download image from source URL and save to standard PS path
+     * Downloads a product image from the source (stored under its source id)
+     * and saves it under its target id, with thumbnails.
      */
-    public function downloadAndSave($sourceUrl, $imageId, $productId, $type = 'products')
+    public function downloadAndSave($sourceUrl, $sourceImageId, $targetImageId)
     {
-        // Manual path construction to be 100% sure
-        $splitIds = str_split((string)$imageId);
-        $folderPath = implode('/', $splitIds);
-        $imgDir = constant('_PS_PROD_IMG_DIR_');
-        $folder = $imgDir . $folderPath . '/';
-        
-        if (!file_exists($folder)) {
-            // Recursive creation
-            if (!mkdir($folder, 0777, true)) {
-                return false; // Failed to create directory
-            }
+        $sourceFolder = implode('/', str_split((string)(int)$sourceImageId));
+        $targetFolder = implode('/', str_split((string)(int)$targetImageId));
+
+        $folder = constant('_PS_PROD_IMG_DIR_') . $targetFolder . '/';
+        if (!file_exists($folder) && !mkdir($folder, 0777, true)) {
+            return false;
         }
 
-        $imagePath = $folder . $imageId . '.jpg';
-        
         if ($this->bridgeClient) {
-            $relativePath = "img/p/$folderPath/$imageId.jpg";
-            $content = $this->bridgeClient->getFile($relativePath);
+            $content = $this->bridgeClient->getFile("img/p/$sourceFolder/$sourceImageId.jpg");
         } else {
-            // Construct source URL
-            // http://source.com/img/p/1/2/3/123.jpg
-            $fullSourceUrl = rtrim($sourceUrl, '/') . "/img/p/$folderPath/$imageId.jpg";
-            $content = Tools::file_get_contents($fullSourceUrl);
+            $content = Tools::file_get_contents(rtrim($sourceUrl, '/') . "/img/p/$sourceFolder/$sourceImageId.jpg");
         }
-        
-        if ($content) {
-            if (file_put_contents($imagePath, $content)) {
-                // GENERATE THUMBNAILS (Crucial for BO visibility)
-                $imagesTypes = \ImageType::getImagesTypes('products');
-                foreach ($imagesTypes as $imageType) {
-                    \ImageManager::resize(
-                        $imagePath,
-                        $folder . $imageId . '-' . stripslashes($imageType['name']) . '.jpg',
-                        (int)$imageType['width'],
-                        (int)$imageType['height']
-                    );
-                }
-                return true;
-            }
+
+        if (!$content) {
+            return false;
         }
-        
-        return false;
+
+        $imagePath = $folder . $targetImageId . '.jpg';
+        if (!file_put_contents($imagePath, $content)) {
+            return false;
+        }
+
+        // Thumbnails (required for the back office to show the image)
+        foreach (\ImageType::getImagesTypes('products') as $imageType) {
+            \ImageManager::resize(
+                $imagePath,
+                $folder . $targetImageId . '-' . stripslashes($imageType['name']) . '.jpg',
+                (int)$imageType['width'],
+                (int)$imageType['height']
+            );
+        }
+
+        return true;
     }
-    
-    // In a real module we would also generate thumbnails here using ImageManager::resize()
 }

@@ -1,17 +1,20 @@
 <?php
 /**
  * PrestaShift Migration Module
- * 
+ *
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
 use Exception;
+use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LanguageMapper;
+use PrestaShift\Service\SchemaHelper;
 
 class CustomerMigrationStep
 {
@@ -29,31 +32,29 @@ class CustomerMigrationStep
 
     public function process($offset, $limit, $dateFilter = null)
     {
-        // 1. Migrate Groups (only once, at offset 0)
+        // 1. Groups (once, at offset 0)
         if ($offset === 0) {
             $this->migrateGroups();
         }
 
-        // 2. Migrate Customers
+        // 2. Customers
         $customers = $this->getCustomersFromSource($offset, $limit, $dateFilter);
         if (empty($customers)) {
             return ['count' => 0, 'finished' => true];
         }
 
+        IdMapper::prepare('customer', array_column($customers, 'id_customer'));
+
+        $migrated = [];
         foreach ($customers as $customer) {
-            $this->importCustomer($customer);
+            if ($this->importCustomer($customer)) {
+                $migrated[] = $customer;
+            }
         }
 
-        // 3. Link customers to their groups (ps_customer_group)
-        $this->migrateCustomerGroups($customers);
+        // 3. Group memberships of the customers created by the migration
+        $this->migrateCustomerGroups($migrated);
 
-        // 4. Migrate Addresses (linked to these customers)
-        // For simplicity in this batch, we migrate addresses for the customers we just imported
-        //$this->migrateAddressesForCustomers($customers);
-        // BETTER STRATEGY: Migrate all addresses in a separate pass or separate batch logic. 
-        // For MVP, let's assume we do Customers batch, then we will switch to Addresses batch.
-        // But the Manager logic needs to handle switching Steps.
-        
         return ['count' => count($customers), 'finished' => false];
     }
 
@@ -68,15 +69,28 @@ class CustomerMigrationStep
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * @return bool true when the customer record was written (false when it
+     *              was matched to an existing account, which is left untouched)
+     */
     private function importCustomer($data)
     {
-        $customerData = [
-            'id_customer' => $data['id_customer'],
-            'id_shop_group' => 1,
-            'id_shop' => \PrestaShift\Service\SchemaHelper::getTargetShopId(),
+        $sid = (int)$data['id_customer'];
+
+        // A registered account with the same e-mail already in the target is
+        // the same person: link to it, never overwrite it
+        IdMapper::own('customer', $sid, ['email' => $data['email'], 'is_guest' => $data['is_guest']]);
+        if (IdMapper::isLinked('customer', $sid)) {
+            return false;
+        }
+
+        $row = IdMapper::row('customer', [
+            'id_customer' => $sid,
+            'id_shop_group' => isset($data['id_shop_group']) ? $data['id_shop_group'] : 1,
+            'id_shop' => isset($data['id_shop']) ? $data['id_shop'] : 1,
             'id_gender' => $data['id_gender'],
             'id_default_group' => $data['id_default_group'],
-            'id_lang' => \PrestaShift\Service\LanguageMapper::toTargetOrDefault($data['id_lang']),
+            'id_lang' => $data['id_lang'],
             'id_risk' => $data['id_risk'],
             'company' => $data['company'],
             'siret' => $data['siret'],
@@ -104,72 +118,54 @@ class CustomerMigrationStep
             'date_upd' => $data['date_upd'],
             'reset_password_token' => isset($data['reset_password_token']) ? $data['reset_password_token'] : null,
             'reset_password_validity' => isset($data['reset_password_validity']) ? $data['reset_password_validity'] : null,
-        ];
+        ]);
 
-        // Dynamic Insert
-        $sql = \PrestaShift\Service\SchemaHelper::buildInsertQuery('customer', $customerData, true);
-        
-        if ($sql) {
-            $sql .= " ON DUPLICATE KEY UPDATE email = VALUES(email)"; 
-            Db::getInstance()->execute($sql);
+        if ((int)$row['id_default_group'] <= 0 || !isset($this->getTargetGroupIds()[(int)$row['id_default_group']])) {
+            $row['id_default_group'] = (int)\Configuration::get((int)$data['is_guest'] ? 'PS_GUEST_GROUP' : 'PS_CUSTOMER_GROUP');
         }
+
+        // Full upsert — Delta must carry changed names, passwords, flags
+        return (bool)SchemaHelper::upsert('customer', $row, ['id_customer']);
     }
 
     private function migrateGroups()
     {
-        // Simple 1:1 migration for groups
-        $sql = "SELECT * FROM `{$this->prefix}group`";
-        $stmt = $this->db_connection->query($sql);
-        $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
+        $groups = $this->db_connection->query("SELECT * FROM `{$this->prefix}group`")->fetchAll(PDO::FETCH_ASSOC);
+
         foreach ($groups as $group) {
-            $idGroup = (int)$group['id_group'];
-            $groupData = [
-                'id_group' => $idGroup,
+            $sid = (int)$group['id_group'];
+            $tid = IdMapper::own('group', $sid);
+
+            // Built-in groups and groups matched by name keep the target's settings
+            if (IdMapper::isLinked('group', $sid)) {
+                continue;
+            }
+
+            SchemaHelper::upsert('group', [
+                'id_group' => $tid,
                 'reduction' => isset($group['reduction']) ? $group['reduction'] : 0,
                 'price_display_method' => (int)$group['price_display_method'],
                 'show_prices' => isset($group['show_prices']) ? (int)$group['show_prices'] : 1,
                 'date_add' => isset($group['date_add']) ? $group['date_add'] : date('Y-m-d H:i:s'),
                 'date_upd' => isset($group['date_upd']) ? $group['date_upd'] : date('Y-m-d H:i:s'),
-            ];
+            ], ['id_group']);
 
-             // SchemaHelper will strip date_add/date_upd if they don't exist in target ps_group (they often don't)
-             // Groups already present in the target (1/2/3) must be overwritten, not skipped,
-             // otherwise their reduction/price_display_method stay at PrestaShop defaults.
-             $sql = \PrestaShift\Service\SchemaHelper::buildUpsertQuery('group', $groupData, ['id_group']);
-             if ($sql) {
-                  Db::getInstance()->execute($sql);
-             }
+            try {
+                Db::getInstance()->execute("REPLACE INTO `" . _DB_PREFIX_ . "group_shop` (id_group, id_shop) VALUES ($tid, " . SchemaHelper::getTargetShopId() . ")");
+            } catch (Exception $e) {
+            }
 
-             // Shop association — without it the group is invisible in the shop context
-             try {
-                 Db::getInstance()->execute(
-                     "REPLACE INTO `" . \_DB_PREFIX_ . "group_shop` (id_group, id_shop) VALUES ($idGroup, "
-                     . \PrestaShift\Service\SchemaHelper::getTargetShopId() . ")"
-                 );
-             } catch (Exception $e) {
-                 // Table may not exist on very old targets — skip
-             }
-
-             // Also lang
-             $sqlLang = "SELECT * FROM `{$this->prefix}group_lang` WHERE id_group = {$group['id_group']}";
-             $stmtLang = $this->db_connection->query($sqlLang);
-             $langs = \PrestaShift\Service\LanguageMapper::expand($stmtLang->fetchAll(PDO::FETCH_ASSOC));
-             foreach ($langs as $lang) {
-                  $langData = [
-                      'id_group' => (int)$group['id_group'],
-                      'id_lang' => (int)$lang['id_lang'],
-                      'name' => $lang['name']
-                  ];
-                  $sqlL = \PrestaShift\Service\SchemaHelper::buildInsertQuery('group_lang', $langData, true);
-                  if ($sqlL) {
-                      $sqlL = str_replace('INSERT INTO', 'INSERT IGNORE INTO', $sqlL);
-                      Db::getInstance()->execute($sqlL);
-                  }
-             }
+            $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}group_lang` WHERE id_group = $sid")->fetchAll(PDO::FETCH_ASSOC));
+            foreach ($langs as $lang) {
+                Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "group_lang` WHERE id_group = $tid AND id_lang = " . (int)$lang['id_lang']);
+                SchemaHelper::insertIgnore('group_lang', [
+                    'id_group' => $tid,
+                    'id_lang' => (int)$lang['id_lang'],
+                    'name' => $lang['name'],
+                ]);
+            }
         }
 
-        // Reset the cache — groups just changed
         $this->targetGroupIds = null;
     }
 
@@ -180,63 +176,56 @@ class CustomerMigrationStep
      */
     private function migrateCustomerGroups(array $customers)
     {
-        $defaults = [];
-        foreach ($customers as $customer) {
-            $defaults[(int)$customer['id_customer']] = (int)$customer['id_default_group'];
-        }
-        if (empty($defaults)) {
+        if (empty($customers)) {
             return;
         }
 
-        $idList = implode(',', array_keys($defaults));
-
-        // Wipe the batch first so re-runs don't accumulate stale memberships
-        Db::getInstance()->execute(
-            "DELETE FROM `" . \_DB_PREFIX_ . "customer_group` WHERE id_customer IN ($idList)"
-        );
+        $targets = [];
+        $defaults = [];
+        foreach ($customers as $customer) {
+            $sid = (int)$customer['id_customer'];
+            $targets[$sid] = IdMapper::find('customer', $sid);
+            $defaults[$sid] = (int)Db::getInstance()->getValue("SELECT id_default_group FROM `" . _DB_PREFIX_ . "customer` WHERE id_customer = " . $targets[$sid], false);
+        }
 
         $links = [];
         try {
-            $stmt = $this->db_connection->query(
-                "SELECT `id_customer`, `id_group` FROM `{$this->prefix}customer_group` WHERE `id_customer` IN ($idList)"
-            );
+            $stmt = $this->db_connection->query("SELECT `id_customer`, `id_group` FROM `{$this->prefix}customer_group` WHERE `id_customer` IN (" . implode(',', array_keys($targets)) . ")");
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                $links[(int)$row['id_customer']][(int)$row['id_group']] = true;
+                $gid = IdMapper::ref('group', (int)$row['id_group']);
+                if ($gid > 0) {
+                    $links[(int)$row['id_customer']][$gid] = true;
+                }
             }
         } catch (Exception $e) {
-            // Source table unreadable — the default group fallback below still applies
+            // Source table unreadable — the default group below still applies
         }
 
         $existingGroups = $this->getTargetGroupIds();
-
         $values = [];
-        foreach ($defaults as $idCustomer => $idDefaultGroup) {
-            // The default group must always be there, even when the source
-            // link table has no row for this customer.
-            if ($idDefaultGroup > 0) {
-                $links[$idCustomer][$idDefaultGroup] = true;
-            }
-            if (empty($links[$idCustomer])) {
+        foreach ($targets as $sid => $tid) {
+            if ($tid <= 0) {
                 continue;
             }
-            foreach (array_keys($links[$idCustomer]) as $idGroup) {
-                // Skip groups that don't exist in the target — would fail the foreign key
-                if (!isset($existingGroups[$idGroup])) {
-                    continue;
+            if ($defaults[$sid] > 0) {
+                $links[$sid][$defaults[$sid]] = true;
+            }
+            if (empty($links[$sid])) {
+                continue;
+            }
+            foreach (array_keys($links[$sid]) as $gid) {
+                if (isset($existingGroups[$gid])) {
+                    $values[] = "($tid, $gid)";
                 }
-                $values[] = "($idCustomer, $idGroup)";
             }
         }
 
-        if (empty($values)) {
-            return;
+        $tids = array_filter($targets);
+        if ($tids) {
+            Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "customer_group` WHERE id_customer IN (" . implode(',', $tids) . ")");
         }
-
         foreach (array_chunk($values, 500) as $chunk) {
-            Db::getInstance()->execute(
-                "INSERT IGNORE INTO `" . \_DB_PREFIX_ . "customer_group` (`id_customer`, `id_group`) VALUES "
-                . implode(', ', $chunk)
-            );
+            Db::getInstance()->execute("INSERT IGNORE INTO `" . _DB_PREFIX_ . "customer_group` (`id_customer`, `id_group`) VALUES " . implode(', ', $chunk));
         }
     }
 
@@ -244,7 +233,7 @@ class CustomerMigrationStep
     {
         if ($this->targetGroupIds === null) {
             $this->targetGroupIds = [];
-            $rows = Db::getInstance()->executeS("SELECT `id_group` FROM `" . \_DB_PREFIX_ . "group`");
+            $rows = Db::getInstance()->executeS("SELECT `id_group` FROM `" . _DB_PREFIX_ . "group`");
             if ($rows) {
                 foreach ($rows as $row) {
                     $this->targetGroupIds[(int)$row['id_group']] = true;

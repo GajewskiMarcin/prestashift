@@ -1,21 +1,30 @@
 <?php
 /**
  * PrestaShift Migration Module
- * 
+ *
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LanguageMapper;
+use PrestaShift\Service\SchemaHelper;
 
 class ProductMigrationStep
 {
     private $db_connection;
     private $prefix;
+
+    /** @var array source id_product => true, for products having combinations */
+    private $withCombinations = [];
+
+    /** @var array source id_product_1 => [source id_product_2, ...] for the batch */
+    private $accessories = [];
 
     public function __construct($db_connection, $prefix)
     {
@@ -30,6 +39,11 @@ class ProductMigrationStep
         if (empty($products)) {
             return ['count' => 0, 'finished' => true];
         }
+
+        $ids = array_map('intval', array_column($products, 'id_product'));
+        IdMapper::prepare('product', $ids);
+        $this->loadCombinationFlags($ids);
+        $this->loadAccessories($ids);
 
         foreach ($products as $product) {
             $this->importProduct($product);
@@ -49,15 +63,37 @@ class ProductMigrationStep
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    private function loadCombinationFlags(array $ids)
+    {
+        $this->withCombinations = [];
+        try {
+            $rows = $this->db_connection->query("SELECT DISTINCT id_product FROM `{$this->prefix}product_attribute` WHERE id_product IN (" . implode(',', $ids) . ")")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                $this->withCombinations[(int)$r['id_product']] = true;
+            }
+        } catch (\Exception $e) {
+        }
+    }
+
+    private function loadAccessories(array $ids)
+    {
+        $this->accessories = [];
+        try {
+            $rows = $this->db_connection->query("SELECT id_product_1, id_product_2 FROM `{$this->prefix}accessory` WHERE id_product_1 IN (" . implode(',', $ids) . ")")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                $this->accessories[(int)$r['id_product_1']][] = (int)$r['id_product_2'];
+            }
+        } catch (\Exception $e) {
+        }
+    }
+
     private function importProduct($data)
     {
-        $id = (int)$data['id_product'];
-        
-        // Prepare data array with ALL possible columns from source (or defaults)
-        // SchemaHelper will filter out what doesn't exist in target.
-        
+        $sid = (int)$data['id_product'];
+        $redirectType = $this->transformRedirectType(isset($data['redirect_type']) ? $data['redirect_type'] : '');
+
         $productData = [
-            'id_product' => $id,
+            'id_product' => $sid,
             'id_supplier' => $data['id_supplier'],
             'id_manufacturer' => $data['id_manufacturer'],
             'id_category_default' => $data['id_category_default'],
@@ -93,9 +129,7 @@ class ProductMigrationStep
             'uploadable_files' => isset($data['uploadable_files']) ? $data['uploadable_files'] : 0,
             'text_fields' => isset($data['text_fields']) ? $data['text_fields'] : 0,
             'active' => $data['active'],
-            'redirect_type' => $this->transformRedirectType($data['redirect_type']),
-            'id_product_redirected' => isset($data['id_product_redirected']) ? $data['id_product_redirected'] : 0,
-            'id_type_redirected' => isset($data['id_type_redirected']) ? $data['id_type_redirected'] : (isset($data['id_product_redirected']) ? $data['id_product_redirected'] : 0),
+            'redirect_type' => $redirectType,
             'available_for_order' => $data['available_for_order'],
             'available_date' => $data['available_date'],
             'show_condition' => $data['show_condition'],
@@ -112,44 +146,81 @@ class ProductMigrationStep
             'advanced_stock_management' => isset($data['advanced_stock_management']) ? $data['advanced_stock_management'] : 0,
             'pack_stock_type' => isset($data['pack_stock_type']) ? $data['pack_stock_type'] : 3,
             'state' => isset($data['state']) ? $data['state'] : 1,
-            'product_type' => isset($data['product_type']) ? $data['product_type'] : 'standard', // PS 1.7+
+            'product_type' => $this->productType($data),
         ];
 
-        // Build INSERT query
-        // 3rd arg true = perform pSQL escaping on values.
-        $sql = \PrestaShift\Service\SchemaHelper::buildInsertQuery('product', $productData, true);
-        
-        if ($sql) {
-            // Append safe ON DUPLICATE KEY UPDATE for standard fields
-            $sql .= " ON DUPLICATE KEY UPDATE date_upd = VALUES(date_upd), price = VALUES(price), id_tax_rules_group = VALUES(id_tax_rules_group)";
-            try {
-                 Db::getInstance()->execute($sql);
-            } catch (\Exception $e) {
-                // Log or ignore
-            }
+        $row = IdMapper::row('product', $productData);
+        $tid = (int)$row['id_product'];
+
+        // Redirect target: a product or a category depending on the type
+        // (PS 1.6 only knew products, in id_product_redirected)
+        $redirectSource = isset($data['id_type_redirected']) ? (int)$data['id_type_redirected']
+            : (isset($data['id_product_redirected']) ? (int)$data['id_product_redirected'] : 0);
+        $redirectEntity = strpos((string)$redirectType, 'category') !== false ? 'category' : 'product';
+        $row['id_type_redirected'] = $redirectSource > 0 ? IdMapper::ref($redirectEntity, $redirectSource) : 0;
+        $row['id_product_redirected'] = $redirectEntity === 'product' ? $row['id_type_redirected'] : 0;
+
+        if ((int)$row['id_category_default'] <= 0) {
+            $row['id_category_default'] = (int)\Configuration::get('PS_HOME_CATEGORY');
         }
 
-        $this->importProductLang($id);
-        $this->importProductShop($id); 
-        $this->importStock($id); 
-        $this->importCategoryLink($id, (int)$data['id_category_default']); // removed replace call, cast serves same purpose safely
+        // Full upsert: a repeated run (Delta) must refresh every field, not
+        // just the price — a partial update leaves half-old products behind.
+        if (!SchemaHelper::upsert('product', $row, ['id_product'])) {
+            return;
+        }
+
+        $this->importProductLang($sid, $tid);
+        $this->importProductShop($row);
+        $this->importStock($sid, $tid);
+        $this->importCategoryLink($sid, $tid, (int)$row['id_category_default']);
+        $this->importAccessories($sid, $tid);
     }
 
-    private function importProductLang($id_product)
+    /**
+     * PrestaShop 8+ decides which product page tabs exist from product_type.
+     * 1.7 sources have no such column — derive it, otherwise products with
+     * combinations open as standard products and their combinations vanish
+     * from the back office.
+     */
+    private function productType($data)
     {
-        $sql = "SELECT * FROM `{$this->prefix}product_lang` WHERE id_product = $id_product";
-        $stmt = $this->db_connection->query($sql);
-        $langs = \PrestaShift\Service\LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC));
+        if (!empty($data['product_type'])) {
+            return $data['product_type'];
+        }
+        if (!empty($data['is_virtual'])) {
+            return 'virtual';
+        }
+        if (!empty($data['cache_is_pack'])) {
+            return 'pack';
+        }
+        if (isset($this->withCombinations[(int)$data['id_product']])) {
+            return 'combinations';
+        }
 
+        return 'standard';
+    }
+
+    private function importProductLang($sid, $tid)
+    {
+        $shopId = SchemaHelper::getTargetShopId();
+        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}product_lang` WHERE id_product = $sid ORDER BY id_shop ASC");
+        $langs = LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC));
+
+        $done = [];
         foreach ($langs as $lang) {
-            $id_lang = (int)$lang['id_lang']; 
-            
-            Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "product_lang` WHERE id_product = $id_product AND id_lang = $id_lang");
-            
-            $langData = [
-                'id_product' => $id_product,
-                'id_shop' => \PrestaShift\Service\SchemaHelper::getTargetShopId(),
-                'id_lang' => $id_lang,
+            $idLang = (int)$lang['id_lang'];
+            if (isset($done[$idLang])) {
+                continue; // multistore source: one row per language
+            }
+            $done[$idLang] = true;
+
+            Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "product_lang` WHERE id_product = $tid AND id_lang = $idLang AND id_shop = $shopId");
+
+            SchemaHelper::upsert('product_lang', [
+                'id_product' => $tid,
+                'id_shop' => $shopId,
+                'id_lang' => $idLang,
                 'description' => $lang['description'],
                 'description_short' => $lang['description_short'],
                 'link_rewrite' => $lang['link_rewrite'],
@@ -161,98 +232,109 @@ class ProductMigrationStep
                 'available_later' => $lang['available_later'],
                 'delivery_in_stock' => isset($lang['delivery_in_stock']) ? $lang['delivery_in_stock'] : null,
                 'delivery_out_stock' => isset($lang['delivery_out_stock']) ? $lang['delivery_out_stock'] : null,
-            ];
-
-            $sql = \PrestaShift\Service\SchemaHelper::buildInsertQuery('product_lang', $langData, true);
-            if ($sql) {
-                Db::getInstance()->execute($sql);
-            }
+            ], ['id_product', 'id_shop', 'id_lang']);
         }
     }
-    
-    private function importProductShop($id_product) {
-         // Fetch the product we just inserted to get the correct values
-         // Or rely on the fact that we have $id_product and we know the values from previous step?
-         // We don't have the $product data array passed here easily unless we change method signature.
-         // Better: SELECT from ps_product local table to be 100% sure what we just saved.
-         
-         $localProduct = Db::getInstance()->getRow("SELECT * FROM `" . \_DB_PREFIX_ . "product` WHERE id_product = $id_product");
-         
-         if (!$localProduct) return;
-         
-         $shopData = [
-             'id_product' => (int)$localProduct['id_product'],
-             'id_shop' => \PrestaShift\Service\SchemaHelper::getTargetShopId(), // Default shop
-             'id_category_default' => (int)$localProduct['id_category_default'],
-             'id_tax_rules_group' => (int)$localProduct['id_tax_rules_group'],
-             'on_sale' => (int)$localProduct['on_sale'],
-             'online_only' => (int)$localProduct['online_only'],
-             'ecotax' => (float)$localProduct['ecotax'],
-             'minimal_quantity' => (int)$localProduct['minimal_quantity'],
-             'low_stock_threshold' => $localProduct['low_stock_threshold'],
-             'low_stock_alert' => $localProduct['low_stock_alert'],
-             'price' => (float)$localProduct['price'],
-             'wholesale_price' => (float)$localProduct['wholesale_price'],
-             'unity' => $localProduct['unity'],
-             'unit_price_ratio' => (float)$localProduct['unit_price_ratio'],
-             'additional_shipping_cost' => (float)$localProduct['additional_shipping_cost'],
-             'customizable' => (int)$localProduct['customizable'],
-             'uploadable_files' => (int)$localProduct['uploadable_files'],
-             'text_fields' => (int)$localProduct['text_fields'],
-             'active' => (int)$localProduct['active'],
-             'redirect_type' => $localProduct['redirect_type'],
-             'id_type_redirected' => (int)$localProduct['id_type_redirected'],
-             'available_for_order' => (int)$localProduct['available_for_order'],
-             'available_date' => $localProduct['available_date'],
-             'show_condition' => (int)$localProduct['show_condition'],
-             'condition' => $localProduct['condition'],
-             'show_price' => (int)$localProduct['show_price'],
-             'indexed' => 1,
-             'visibility' => $localProduct['visibility'],
-             'cache_default_attribute' => (int)$localProduct['cache_default_attribute'],
-             'advanced_stock_management' => (int)$localProduct['advanced_stock_management'],
-             'date_add' => $localProduct['date_add'],
-             'date_upd' => $localProduct['date_upd'],
-             'pack_stock_type' => isset($localProduct['pack_stock_type']) ? $localProduct['pack_stock_type'] : 3,
-         ];
 
-         // Use SchemaHelper to safe insert into product_shop
-         // This ensures we populate price, tax, etc.
-         
-         $sql = \PrestaShift\Service\SchemaHelper::buildInsertQuery('product_shop', $shopData, true);
-         if ($sql) {
-              $sql .= " ON DUPLICATE KEY UPDATE price = VALUES(price), active = VALUES(active), date_upd = VALUES(date_upd), id_tax_rules_group = VALUES(id_tax_rules_group)";
-              Db::getInstance()->execute($sql);
-         }
+    /**
+     * @param array $p translated product row (target ids)
+     */
+    private function importProductShop(array $p)
+    {
+        $shopData = [
+            'id_product' => (int)$p['id_product'],
+            'id_shop' => SchemaHelper::getTargetShopId(),
+            'id_category_default' => (int)$p['id_category_default'],
+            'id_tax_rules_group' => (int)$p['id_tax_rules_group'],
+            'on_sale' => (int)$p['on_sale'],
+            'online_only' => (int)$p['online_only'],
+            'ecotax' => (float)$p['ecotax'],
+            'minimal_quantity' => (int)$p['minimal_quantity'],
+            'low_stock_threshold' => $p['low_stock_threshold'],
+            'low_stock_alert' => $p['low_stock_alert'],
+            'price' => (float)$p['price'],
+            'wholesale_price' => (float)$p['wholesale_price'],
+            'unity' => $p['unity'],
+            'unit_price_ratio' => (float)$p['unit_price_ratio'],
+            'additional_shipping_cost' => (float)$p['additional_shipping_cost'],
+            'customizable' => (int)$p['customizable'],
+            'uploadable_files' => (int)$p['uploadable_files'],
+            'text_fields' => (int)$p['text_fields'],
+            'active' => (int)$p['active'],
+            'redirect_type' => $p['redirect_type'],
+            'id_type_redirected' => (int)$p['id_type_redirected'],
+            'id_product_redirected' => (int)$p['id_product_redirected'],
+            'available_for_order' => (int)$p['available_for_order'],
+            'available_date' => $p['available_date'],
+            'show_condition' => (int)$p['show_condition'],
+            'condition' => $p['condition'],
+            'show_price' => (int)$p['show_price'],
+            'indexed' => 1,
+            'visibility' => $p['visibility'],
+            'cache_default_attribute' => (int)$p['cache_default_attribute'],
+            'advanced_stock_management' => (int)$p['advanced_stock_management'],
+            'date_add' => $p['date_add'],
+            'date_upd' => $p['date_upd'],
+            'pack_stock_type' => $p['pack_stock_type'],
+        ];
+
+        SchemaHelper::upsert('product_shop', $shopData, ['id_product', 'id_shop']);
     }
 
-    private function importStock($id_product) {
-        // Source quantity and out_of_stock setting from ps_stock_available
-        $sql = "SELECT quantity, out_of_stock FROM `{$this->prefix}stock_available` WHERE id_product = $id_product AND id_product_attribute = 0";
+    private function importStock($sid, $tid)
+    {
+        $sql = "SELECT quantity, out_of_stock FROM `{$this->prefix}stock_available` WHERE id_product = $sid AND id_product_attribute = 0";
         $row = $this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 
         $qty = isset($row[0]['quantity']) ? (int)$row[0]['quantity'] : 0;
 
-        // Update quantity
-        \StockAvailable::setQuantity($id_product, 0, $qty);
+        \StockAvailable::setQuantity($tid, 0, $qty);
 
         // Force out_of_stock=2 (use global setting) — safer than copying
         // per-product overrides from source which may be stale or incorrect
-        \StockAvailable::setProductOutOfStock($id_product, 2);
+        \StockAvailable::setProductOutOfStock($tid, 2);
     }
-    
-    private function importCategoryLink($id_product, $id_cat_default) {
-        // Fetch all categories for this product
-        $sql = "SELECT id_category, position FROM `{$this->prefix}category_product` WHERE id_product = $id_product";
-        $stmt = $this->db_connection->query($sql);
+
+    private function importCategoryLink($sid, $tid, $defaultCategory)
+    {
+        $stmt = $this->db_connection->query("SELECT id_category, position FROM `{$this->prefix}category_product` WHERE id_product = $sid");
         $cats = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "category_product` WHERE id_product = $id_product");
-        
+
+        Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "category_product` WHERE id_product = $tid");
+
+        $values = [];
         foreach ($cats as $cat) {
-            $id_category = (int)$cat['id_category'];
-            $pos = (int)$cat['position'];
-            Db::getInstance()->execute("INSERT INTO `" . \_DB_PREFIX_ . "category_product` (id_category, id_product, position) VALUES ($id_category, $id_product, $pos)");
+            $idCategory = IdMapper::ref('category', (int)$cat['id_category']);
+            if ($idCategory <= 0) {
+                continue;
+            }
+            $values[$idCategory] = "($idCategory, $tid, " . (int)$cat['position'] . ")";
+        }
+        if ($defaultCategory > 0 && !isset($values[$defaultCategory])) {
+            $values[$defaultCategory] = "($defaultCategory, $tid, 0)";
+        }
+
+        if ($values) {
+            Db::getInstance()->execute("INSERT IGNORE INTO `" . _DB_PREFIX_ . "category_product` (id_category, id_product, position) VALUES " . implode(',', $values));
+        }
+    }
+
+    /**
+     * Related products ("accessories").
+     */
+    private function importAccessories($sid, $tid)
+    {
+        Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "accessory` WHERE id_product_1 = $tid");
+
+        $values = [];
+        foreach (isset($this->accessories[$sid]) ? $this->accessories[$sid] : [] as $sourceOther) {
+            $other = IdMapper::ref('product', $sourceOther);
+            if ($other > 0) {
+                $values[$other] = "($tid, $other)";
+            }
+        }
+        if ($values) {
+            Db::getInstance()->execute("INSERT IGNORE INTO `" . _DB_PREFIX_ . "accessory` (id_product_1, id_product_2) VALUES " . implode(',', $values));
         }
     }
 

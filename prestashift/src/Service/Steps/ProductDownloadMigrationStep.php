@@ -5,12 +5,12 @@
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
-use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\SchemaHelper;
 
 class ProductDownloadMigrationStep
@@ -51,16 +51,14 @@ class ProductDownloadMigrationStep
 
     private function importItem($data)
     {
-        $sql = SchemaHelper::buildUpsertQuery('product_download', $data, ['id_product_download']);
-        if ($sql) {
-            try {
-                Db::getInstance()->execute($sql);
-            } catch (\Exception $e) {
-                // Log error
-            }
+        $row = IdMapper::row('product_download', $data);
+        if ((int)$row['id_product'] <= 0) {
+            return;
         }
 
-        // File download
+        SchemaHelper::upsert('product_download', $row, ['id_product_download']);
+
+        // Files are stored under a hash name, not an id
         if (!$this->skip_files && !empty($data['filename'])) {
             try {
                 $sourceFile = $this->db_connection->getFile('download/' . $data['filename']);

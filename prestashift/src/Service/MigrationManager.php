@@ -39,7 +39,8 @@ class MigrationManager
         'orders', 'order_payment', 'order_slip', 'cart',
         'wishlist', 'stock_mvt',
         'product_comments',
-        'configuration'
+        'configuration',
+        'integrity'
     ];
 
     /**
@@ -86,6 +87,7 @@ class MigrationManager
         'stock_mvt'          => 'catalog',
         'product_comments'   => 'reviews',
         'configuration'      => 'configuration',
+        'integrity'          => '*',
     ];
 
     public function __construct()
@@ -177,6 +179,9 @@ class MigrationManager
             return true; // No scope = run everything (backward compat)
         }
         $requiredScope = isset(self::$taskScopeMap[$task]) ? self::$taskScopeMap[$task] : null;
+        if ($requiredScope === '*') {
+            return true; // runs for every migration
+        }
         return $requiredScope && !empty($scope[$requiredScope]);
     }
 
@@ -261,6 +266,10 @@ class MigrationManager
         // target can hold languages the source never had. Static state does not
         // survive a request, so rebuild the mapping for every batch.
         LanguageMapper::init($conn, $prefix);
+
+        // Source → target id map (persisted). Same engine with and without
+        // "Clean target data": after cleaning the offsets are 0, so ids stay 1:1.
+        IdMapper::begin($conn, $prefix, $config);
 
         $result = ['count' => 0, 'finished' => false];
         $message = '';
@@ -762,10 +771,20 @@ class MigrationManager
                 $message = $this->l('Migrating shop configuration...');
                 if ($result['finished']) {
                     $this->updateSyncHistory('configuration', date('Y-m-d H:i:s'));
-                    $state['current_task'] = 'finished';
+                    $state['current_task'] = 'integrity';
                     $state['offset'] = 0;
-                    $message = $this->l('Migration fully completed!');
+                    $message = $this->l('Configuration done. Checking data integrity...');
                 }
+                break;
+
+            // Repairs references that point at records missing in the target
+            case 'integrity':
+                IntegrityService::run($scope);
+                $result = ['count' => 1, 'finished' => true];
+                $log->info(IdMapper::describe());
+                $state['current_task'] = 'finished';
+                $state['offset'] = 0;
+                $message = $this->l('Migration fully completed!');
                 break;
 
             case 'finished':
@@ -781,6 +800,9 @@ class MigrationManager
                 $state['current_task'] = 'finished';
         }
         
+        // Keep AUTO_INCREMENT above every id reserved in this batch
+        IdMapper::finishBatch();
+
         // Log batch result
         $batchCount = isset($result['count']) ? $result['count'] : 0;
         $log->info("Task: {$task} | Offset: {$offset} | Batch: {$batchCount} | " . $message);
@@ -832,7 +854,8 @@ class MigrationManager
             'wishlist' => 2,
             'stock_mvt' => 3,
             'product_comments' => 3,
-            'configuration' => 1
+            'configuration' => 1,
+            'integrity' => 1
         ];
 
         // Only count enabled steps for progress calculation

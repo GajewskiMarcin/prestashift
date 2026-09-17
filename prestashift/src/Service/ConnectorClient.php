@@ -149,38 +149,3 @@ class ConnectorClient
     }
 }
 
-/**
- * Mock class for PDOStatement
- */
-class ConnectorResult
-{
-    private $data;
-    private $cursor = 0;
-
-    public function __construct($data)
-    {
-        $this->data = $data;
-    }
-
-    public function fetchAll($mode = null)
-    {
-        return $this->data;
-    }
-
-    public function fetch($mode = null)
-    {
-        if (isset($this->data[$this->cursor])) {
-            return $this->data[$this->cursor++];
-        }
-        return false;
-    }
-
-    public function fetchColumn($column_number = 0)
-    {
-        if (empty($this->data) || !isset($this->data[0])) {
-            return false;
-        }
-        $row = array_values($this->data[0]);
-        return $row[$column_number] ?? false;
-    }
-}

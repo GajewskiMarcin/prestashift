@@ -5,12 +5,14 @@
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.0.0
+ * @version   1.3.0
  */
 namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
 
 class StoreMigrationStep
@@ -48,59 +50,35 @@ class StoreMigrationStep
 
         try {
             $sql = "SELECT * FROM `{$this->prefix}store` {$where} ORDER BY `id_store` ASC LIMIT $limit OFFSET $offset";
-            $stmt = $this->db_connection->query($sql);
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            return $this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC);
         } catch (\Exception $e) {
-            // Table may not exist in old PS versions
             return [];
         }
     }
 
     private function importStore($data)
     {
-        $id = (int)$data['id_store'];
-
-        $sql = SchemaHelper::buildUpsertQuery('store', $data, ['id_store']);
-
-        if ($sql) {
-            try {
-                Db::getInstance()->execute($sql);
-            } catch (\Exception $e) {
-                // Log error
-            }
+        $sid = (int)$data['id_store'];
+        $row = IdMapper::row('store', $data);
+        $tid = (int)$row['id_store'];
+        if ((int)$row['id_country'] <= 0) {
+            $row['id_country'] = (int)\Configuration::get('PS_COUNTRY_DEFAULT');
+            $row['id_state'] = 0;
         }
 
-        // Lang
-        $this->importStoreLang($id);
+        SchemaHelper::upsert('store', $row, ['id_store']);
 
-        // Shop association
-        $shopData = [
-            'id_store' => $id,
-            'id_shop' => \PrestaShift\Service\SchemaHelper::getTargetShopId(),
-        ];
-        $sqlShop = SchemaHelper::buildInsertQuery('store_shop', $shopData, true);
-        if ($sqlShop) {
-            $sqlShop = str_replace('INSERT INTO', 'INSERT IGNORE INTO', $sqlShop);
-            Db::getInstance()->execute($sqlShop);
-        }
-    }
-
-    private function importStoreLang($id_store)
-    {
         try {
-            $sql = "SELECT * FROM `{$this->prefix}store_lang` WHERE id_store = $id_store";
-            $rows = \PrestaShift\Service\LanguageMapper::expand($this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC));
+            $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}store_lang` WHERE id_store = $sid")->fetchAll(PDO::FETCH_ASSOC));
         } catch (\Exception $e) {
-            return;
+            $langs = [];
+        }
+        Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "store_lang` WHERE id_store = $tid");
+        foreach ($langs as $lang) {
+            $lang['id_store'] = $tid;
+            SchemaHelper::insertIgnore('store_lang', $lang);
         }
 
-        Db::getInstance()->execute("DELETE FROM `" . \_DB_PREFIX_ . "store_lang` WHERE id_store = $id_store");
-
-        foreach ($rows as $row) {
-            $sqlIns = SchemaHelper::buildInsertQuery('store_lang', $row, true);
-            if ($sqlIns) {
-                Db::getInstance()->execute($sqlIns);
-            }
-        }
+        SchemaHelper::insertIgnore('store_shop', ['id_store' => $tid, 'id_shop' => SchemaHelper::getTargetShopId()]);
     }
 }
