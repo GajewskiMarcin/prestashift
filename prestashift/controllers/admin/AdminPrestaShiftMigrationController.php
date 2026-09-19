@@ -5,6 +5,7 @@
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
+ * @attribution PrestaShift by Marcin Gajewski (marcingajewski.pl). Keep the Attribution Notice in prestashift.php — AFL-3.0 section 6.
  * @version   1.0.0
  */
 

@@ -18,6 +18,7 @@ Professional data migration tool for PrestaShop. Migrate your shop data between 
 - **File logging** — detailed logs in `var/logs/prestashift.log`
 - **Redirect map** — generates 301 redirect file for SEO preservation
 - **Status mapping** — map order statuses between source and target
+- **Interface languages** — English, Polish, French, Spanish, Portuguese
 - **Selective configuration** — migrates safe shop settings (name, SEO, shipping, etc.)
 - **Multi-language** — English + Polish (translatable via PrestaShop Back Office)
 
