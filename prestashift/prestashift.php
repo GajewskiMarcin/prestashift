@@ -5,7 +5,18 @@
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.3.1
+ * @version   1.3.2
+ *
+ * ATTRIBUTION NOTICE (Academic Free License 3.0, section 6)
+ *
+ * PrestaShift was created by Marcin Gajewski — https://marcingajewski.pl
+ * Original project: https://github.com/GajewskiMarcin/prestashift
+ * Support the work: https://buymeacoffee.com/marcingajewski
+ *
+ * Derivative works and forks must keep this notice, the author credit, and the
+ * support link shown on the module's final screen. "PrestaShift" is the name of
+ * the original module: if you publish a modified version, please give it your
+ * own name.
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -37,7 +48,7 @@ class PrestaShift extends Module
     {
         $this->name = 'prestashift';
         $this->tab = 'administration';
-        $this->version = '1.3.1';
+        $this->version = '1.3.2';
         $this->author = 'marcingajewski.pl';
         $this->need_instance = 0;
         $this->bootstrap = true;

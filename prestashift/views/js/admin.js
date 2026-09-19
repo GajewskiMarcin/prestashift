@@ -179,12 +179,25 @@ var PrestaShift = {
         $.ajax({
             url: controller_url,
             type: 'POST',
+            dataType: 'text',
             data: {
                 ajax: true,
                 action: 'render_step',
                 step: step
             },
-            success: function (response) {
+            success: function (raw, textStatus, jqXHR) {
+                // The answer has to be JSON. A server that prepends PHP
+                // notices, a login page or a security-token page lands here
+                // too, so pull the JSON out and, when there is none, say what
+                // actually came back.
+                var response = PrestaShift.readJson(raw);
+                if (!response) {
+                    $('#step-content').html(PrestaShift.problemBox(PrestaShift.t('step_failed'), PrestaShift.describeAjaxError(jqXHR, 'parsererror', raw)));
+                    return;
+                }
+                if (response.noise) {
+                    console.warn('PrestaShift: the server added text before the answer:', response.noise);
+                }
                 if (response.content) {
                     $('#step-content').html(response.content);
                     PrestaShift.restoreData(step);
@@ -207,10 +220,69 @@ var PrestaShift = {
                     $('#step-content').html('<div class="alert alert-danger">Empty content</div>');
                 }
             },
-            error: function () {
-                $('#step-content').html('<div class="alert alert-danger">Failed to load step</div>');
+            error: function (jqXHR, textStatus) {
+                $('#step-content').html(PrestaShift.problemBox(PrestaShift.t('step_failed'), PrestaShift.describeAjaxError(jqXHR, textStatus)));
             }
         });
+    },
+
+    /**
+     * Reads the module's JSON answer. Some servers prepend PHP notices or an
+     * HTML page to it, which used to surface only as "failed to load".
+     */
+    readJson: function (raw) {
+        if (typeof raw !== 'string') {
+            return raw || null;
+        }
+        try {
+            return JSON.parse(raw);
+        } catch (e) {
+            var start = raw.indexOf('{');
+            var end = raw.lastIndexOf('}');
+            if (start > -1 && end > start) {
+                try {
+                    var data = JSON.parse(raw.substring(start, end + 1));
+                    data.noise = raw.substring(0, start);
+                    return data;
+                } catch (e2) {
+                    return null;
+                }
+            }
+            return null;
+        }
+    },
+
+    /**
+     * Turns a failed request into something the shop owner can act on:
+     * the likely cause, the HTTP status and what the server actually sent.
+     */
+    describeAjaxError: function (jqXHR, textStatus, raw) {
+        var status = jqXHR && jqXHR.status ? jqXHR.status : 0;
+        var body = (raw !== undefined ? raw : (jqXHR && jqXHR.responseText) || '');
+        var text = $('<div>').html(String(body).replace(/<script[^]*?<\/script>/gi, '')).text().replace(/\s+/g, ' ').trim();
+
+        var reason;
+        if (status === 0) {
+            reason = PrestaShift.t('err_no_answer');
+        } else if (status === 401 || status === 403 || /invalid security token/i.test(text)) {
+            reason = PrestaShift.t('err_session');
+        } else if (status === 404) {
+            reason = PrestaShift.t('err_not_found');
+        } else if (status >= 500) {
+            reason = PrestaShift.t('err_server');
+        } else if (textStatus === 'parsererror') {
+            reason = PrestaShift.t('err_not_json');
+        } else {
+            reason = PrestaShift.t('error');
+        }
+
+        return reason + (status ? ' (HTTP ' + status + ')' : '')
+            + (text ? '<br><code style="display:block; margin-top:.5rem; white-space:pre-wrap; word-break:break-word; font-size:.75rem;">'
+                + $('<div>').text(text.substring(0, 400)).html() + '</code>' : '');
+    },
+
+    problemBox: function (title, detail) {
+        return '<div class="alert alert-danger" style="text-align:left;"><strong>' + title + '</strong><br>' + detail + '</div>';
     },
 
     restoreData: function (step) {
@@ -297,8 +369,8 @@ var PrestaShift = {
                     $('#zone-mapping-table-container').html('<div class="alert alert-danger">' + (response.message || PrestaShift.t('error')) + '</div>');
                 }
             },
-            error: function () {
-                $('#zone-mapping-table-container').html('<div class="alert alert-danger">Error fetching zones</div>');
+            error: function (jqXHR, textStatus) {
+                $('#zone-mapping-table-container').html(PrestaShift.problemBox(PrestaShift.t('zones_error'), PrestaShift.describeAjaxError(jqXHR, textStatus)));
             }
         });
     },
@@ -519,8 +591,8 @@ var PrestaShift = {
                     $('#status-mapping-table-container').html('<div class="alert alert-danger">' + response.message + '</div>');
                 }
             },
-            error: function () {
-                $('#status-mapping-table-container').html('<div class="alert alert-danger">Error fetching statuses</div>');
+            error: function (jqXHR, textStatus) {
+                $('#status-mapping-table-container').html(PrestaShift.problemBox(PrestaShift.t('statuses_error'), PrestaShift.describeAjaxError(jqXHR, textStatus)));
             }
         });
     },

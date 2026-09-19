@@ -394,7 +394,17 @@ $translations = array(
     // === 1.3.0: id map (migration into a shop with data) ===
     'Deletes the data of the selected areas in this shop first, then keeps the source IDs 1:1. Off: migrated data is added next to the existing data, with new IDs.' => 'Najpierw usuwa dane wybranych obszarów w tym sklepie, potem zachowuje ID ze starego sklepu 1:1. Wyłączone: przenoszone dane trafiają obok istniejących, z nowymi ID.',
     'Existing data is kept — migrated records get new IDs. Enable "Clean Target Data" to keep the source IDs 1:1.' => 'Istniejące dane zostaną — przenoszone rekordy dostaną nowe ID. Włącz „Wyczyść dane docelowe”, aby zachować ID 1:1.',
-    'Configuration done. Checking data integrity...' => 'Konfiguracja zakończona. Sprawdzanie spójności danych...'
+    'Configuration done. Checking data integrity...' => 'Konfiguracja zakończona. Sprawdzanie spójności danych...',
+
+    // === 1.3.2: czytelne powody nieudanego wczytania kroku ===
+    'This step could not be loaded.' => 'Nie udało się wczytać tego kroku.',
+    'The shop gave no answer — the request was blocked, timed out, or the connection dropped.' => 'Sklep nie odpowiedział — żądanie zostało zablokowane, przekroczyło limit czasu albo połączenie zostało zerwane.',
+    'Your back-office session has expired. Reload the page and log in again.' => 'Sesja w panelu wygasła. Odśwież stronę i zaloguj się ponownie.',
+    'The module page was not found. Reinstall the module or clear the shop cache.' => 'Nie znaleziono strony modułu. Zainstaluj moduł ponownie lub wyczyść pamięć podręczną sklepu.',
+    'The shop returned a server error. The details are below and in your hosting error log.' => 'Sklep zwrócił błąd serwera. Szczegóły są poniżej oraz w logu błędów hostingu.',
+    'The shop returned something else than the module expected — usually a PHP warning, a security plugin or a login page.' => 'Sklep zwrócił coś innego, niż moduł oczekiwał — zwykle ostrzeżenie PHP, wtyczkę bezpieczeństwa albo stronę logowania.',
+    'Zones could not be loaded from the source shop.' => 'Nie udało się pobrać stref ze starego sklepu.',
+    'Order statuses could not be loaded from the source shop.' => 'Nie udało się pobrać statusów zamówień ze starego sklepu.'
 );
 
 // Map of Phrases to Contexts (Generated from Scan)

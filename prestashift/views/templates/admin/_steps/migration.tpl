@@ -117,6 +117,7 @@
                 {l s='If you find PrestaShift useful, consider supporting development' mod='prestashift'}
             </p>
             <div class="ps-flex-center" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; margin-top: 1.5rem;">
+                {* Attribution Notice (AFL-3.0 section 6): derivative works must keep this block. *}
                 <a href="https://buymeacoffee.com/marcingajewski" target="_blank" class="ps-btn ps-btn-lg" style="padding-left: 2rem; padding-right: 2rem; background: #FFDD00; color: #000; border: none; font-weight: 600;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" x2="6" y1="2" y2="4"/><line x1="10" x2="10" y1="2" y2="4"/><line x1="14" x2="14" y1="2" y2="4"/></svg>
                     {l s='Buy me a coffee' mod='prestashift'}

@@ -111,3 +111,18 @@ Created by [marcingajewski.pl](https://marcingajewski.pl)
 ## License
 
 [Academic Free License 3.0 (AFL-3.0)](LICENSE) — the standard licence for PrestaShop modules.
+
+### Attribution Notice
+
+The following is an **Attribution Notice** under section 6 of the AFL-3.0. Section 6 requires
+every derivative work to retain it:
+
+> PrestaShift was created by Marcin Gajewski — https://marcingajewski.pl
+> Original project: https://github.com/GajewskiMarcin/prestashift
+> Support the work: https://buymeacoffee.com/marcingajewski
+>
+> Derivative works and forks must keep this notice, the author credit, and the support link shown
+> on the module's final screen. "PrestaShift" is the name of the original module: if you publish a
+> modified version, please give it your own name.
+
+Forks are welcome — fixes sent back as pull requests reach every user of the module.

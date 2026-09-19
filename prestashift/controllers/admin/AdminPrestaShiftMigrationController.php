@@ -56,6 +56,15 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                 'test_connection_btn' => $this->module->l('Test Connection & Continue', 'AdminPrestaShiftMigrationController'),
                 'testing' => $this->module->l('Testing...', 'AdminPrestaShiftMigrationController'),
                 'rate_limit_wait' => $this->module->l('Rate limit reached — waiting before retrying the batch...', 'AdminPrestaShiftMigrationController'),
+                // Why a step could not be loaded — a bare "failed" tells nobody anything
+                'step_failed' => $this->module->l('This step could not be loaded.', 'AdminPrestaShiftMigrationController'),
+                'err_no_answer' => $this->module->l('The shop gave no answer — the request was blocked, timed out, or the connection dropped.', 'AdminPrestaShiftMigrationController'),
+                'err_session' => $this->module->l('Your back-office session has expired. Reload the page and log in again.', 'AdminPrestaShiftMigrationController'),
+                'err_not_found' => $this->module->l('The module page was not found. Reinstall the module or clear the shop cache.', 'AdminPrestaShiftMigrationController'),
+                'err_server' => $this->module->l('The shop returned a server error. The details are below and in your hosting error log.', 'AdminPrestaShiftMigrationController'),
+                'err_not_json' => $this->module->l('The shop returned something else than the module expected — usually a PHP warning, a security plugin or a login page.', 'AdminPrestaShiftMigrationController'),
+                'zones_error' => $this->module->l('Zones could not be loaded from the source shop.', 'AdminPrestaShiftMigrationController'),
+                'statuses_error' => $this->module->l('Order statuses could not be loaded from the source shop.', 'AdminPrestaShiftMigrationController'),
                 'connection_error' => $this->module->l('Connection Error', 'AdminPrestaShiftMigrationController'),
                 'connection_check_failed' => $this->module->l('Connection Check Failed:', 'AdminPrestaShiftMigrationController'),
                 'preflight_running' => $this->module->l('Running pre-flight checks...', 'AdminPrestaShiftMigrationController'),
@@ -131,7 +140,9 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             }
             
             $moduleDir = _PS_MODULE_DIR_;
-            $basePath = $moduleDir . 'prestashift/views/templates/admin/_steps/';
+            // The real folder, not a hardcoded name — the module still works
+            // when its directory was renamed on upload.
+            $basePath = $moduleDir . $this->module->name . '/views/templates/admin/_steps/';
             
             $debug_info = [
                 'step' => $step,
