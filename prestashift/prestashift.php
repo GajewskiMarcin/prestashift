@@ -5,7 +5,7 @@
  * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.3.0
+ * @version   1.3.1
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -37,7 +37,7 @@ class PrestaShift extends Module
     {
         $this->name = 'prestashift';
         $this->tab = 'administration';
-        $this->version = '1.3.0';
+        $this->version = '1.3.1';
         $this->author = 'marcingajewski.pl';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -76,14 +76,26 @@ class PrestaShift extends Module
         $tab = new Tab();
         $tab->active = 1;
         $tab->class_name = 'AdminPrestaShiftMigration';
-        $tab->name = [];
-        foreach (Language::getLanguages(true) as $lang) {
-            $tab->name[$lang['id_lang']] = 'Migracja PrestaShift';
-        }
+        $tab->name = $this->getTabNames();
         $tab->id_parent = (int) Tab::getIdFromClassName('AdminAdvancedParameters');
         $tab->module = $this->name;
 
         return $tab->add();
+    }
+
+    /**
+     * Menu caption in every installed language. A hardcoded name showed the
+     * Polish caption to every shop, whatever its language.
+     */
+    public function getTabNames()
+    {
+        $names = [];
+        foreach (Language::getLanguages(true) as $lang) {
+            $locale = isset($lang['locale']) ? $lang['locale'] : null;
+            $names[(int) $lang['id_lang']] = $this->l('PrestaShift Migration', false, $locale);
+        }
+
+        return $names;
     }
 
     public function uninstallTab()
