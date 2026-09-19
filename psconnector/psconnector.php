@@ -2,7 +2,7 @@
 /**
  * PrestaShift Connector
  * 
- * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
+ * @author    marcingajewski.pl <kontakt@marcingajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
  * @version   1.2.0

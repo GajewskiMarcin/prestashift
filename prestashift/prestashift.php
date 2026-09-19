@@ -2,11 +2,11 @@
 /**
  * PrestaShift Migration Module
  * 
- * @author    marcingajewski.pl <kontakt@marcin.gajewski.pl>
+ * @author    marcingajewski.pl <kontakt@marcingajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
  * @attribution PrestaShift by Marcin Gajewski (marcingajewski.pl). Keep the Attribution Notice in prestashift.php — AFL-3.0 section 6.
- * @version   1.4.1
+ * @version   1.4.2
  *
  * ATTRIBUTION NOTICE (Academic Free License 3.0, section 6)
  *
@@ -49,7 +49,7 @@ class PrestaShift extends Module
     {
         $this->name = 'prestashift';
         $this->tab = 'administration';
-        $this->version = '1.4.1';
+        $this->version = '1.4.2';
         $this->author = 'marcingajewski.pl';
         $this->need_instance = 0;
         $this->bootstrap = true;
