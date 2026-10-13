@@ -24,14 +24,65 @@ header_remove('Location');
 // PrestaShop 1.6 shops are still hosted on (5.6 and up), hence no "??".
 function psconnector_post($key, $default = '')
 {
-    return isset($_POST[$key]) ? $_POST[$key] : $default;
+    // Strings only: "token[]=x" must not reach hash_equals() or base64_decode()
+    return isset($_POST[$key]) && is_string($_POST[$key]) ? $_POST[$key] : $default;
+}
+
+/**
+ * The connector promises to be read-only, and looking at the first word of
+ * the query does not keep that promise: "SELECT 1; DELETE FROM ..." starts
+ * with SELECT and PDO runs both statements, SET or CALL are not on any list,
+ * and SELECT ... INTO OUTFILE writes a file on the database server.
+ *
+ * True only for one single SELECT or SHOW statement that cannot write.
+ */
+function psconnector_is_read_only($sql)
+{
+    if (!is_string($sql) || !preg_match('/^\s*(SELECT|SHOW)\b/i', $sql)) {
+        return false;
+    }
+
+    // Empty the quoted parts: what is left is the statement itself, and
+    // values (product descriptions…) can no longer be mistaken for it
+    $bare = '';
+    $quote = '';
+    $length = strlen($sql);
+    for ($i = 0; $i < $length; $i++) {
+        $char = $sql[$i];
+        if ($quote === '') {
+            if ($char === "'" || $char === '"' || $char === '`') {
+                $quote = $char;
+            }
+            $bare .= $char;
+        } elseif ($char === '\\' && $quote !== '`') {
+            $i++; // escaped character
+        } elseif ($char === $quote) {
+            if ($i + 1 < $length && $sql[$i + 1] === $quote) {
+                $i++; // doubled quote, still inside
+            } else {
+                $quote = '';
+                $bare .= $char;
+            }
+        }
+    }
+    if ($quote !== '') {
+        return false; // unterminated quote
+    }
+
+    // A second statement, or a comment (MySQL runs what is inside /*! ... */)
+    if (preg_match('/;\s*\S|--|#|\/\*/', $bare)) {
+        return false;
+    }
+
+    // Reading or writing files on the database server
+    return !preg_match('/\bINTO\s+(OUTFILE|DUMPFILE)\b|\bLOAD_FILE\s*\(/i', $bare);
 }
 
 // 1. Security Check — Token validation
 $storedToken = Configuration::get('PS_CONNECTOR_TOKEN');
 $receivedToken = isset($_SERVER['HTTP_X_PS_CONNECTOR_TOKEN']) ? $_SERVER['HTTP_X_PS_CONNECTOR_TOKEN'] : psconnector_post('token');
 
-if (empty($storedToken) || empty($receivedToken) || !hash_equals($storedToken, $receivedToken)) {
+if (empty($storedToken) || empty($receivedToken) || !hash_equals((string)$storedToken, (string)$receivedToken)) {
     header('HTTP/1.1 403 Forbidden');
     header('Content-Type: application/json');
     echo json_encode(['success' => false, 'error' => 'Unauthorized access.']);
@@ -82,12 +133,8 @@ try {
         }
 
         // Security: block write operations — connector is READ-ONLY
-        $sqlUpper = strtoupper(trim($sql));
-        $blocked = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'TRUNCATE', 'CREATE', 'REPLACE', 'RENAME', 'GRANT', 'REVOKE'];
-        foreach ($blocked as $keyword) {
-            if (strpos($sqlUpper, $keyword) === 0) {
-                throw new Exception("Write operations are not allowed. Connector is read-only.");
-            }
+        if (!psconnector_is_read_only($sql)) {
+            throw new Exception("Write operations are not allowed. Connector is read-only.");
         }
 
         $results = Db::getInstance()->executeS($sql);
