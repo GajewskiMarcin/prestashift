@@ -804,6 +804,28 @@ class MigrationManager
         // Keep AUTO_INCREMENT above every id reserved in this batch
         IdMapper::finishBatch();
 
+        // Rows the target database refused. They are skipped, never fatal — but
+        // the operator has to see them, or a missing entity looks like success.
+        $warnings = [];
+        foreach (SchemaHelper::pullFailures() as $table => $failure) {
+            $warnings[] = sprintf(
+                $this->l('%1$d row(s) could not be written to table %2$s: %3$s'),
+                $failure['count'],
+                $table,
+                $failure['error']
+            );
+            $state['write_errors'] = (isset($state['write_errors']) ? (int)$state['write_errors'] : 0) + $failure['count'];
+        }
+        if ($state['current_task'] === 'finished' && !empty($state['write_errors'])) {
+            $warnings[] = sprintf(
+                $this->l('Migration finished, but %d row(s) could not be written. See the messages above.'),
+                $state['write_errors']
+            );
+        }
+        foreach ($warnings as $warning) {
+            $log->error("Task: {$task} | " . $warning);
+        }
+
         // Log batch result
         $batchCount = isset($result['count']) ? $result['count'] : 0;
         $log->info("Task: {$task} | Offset: {$offset} | Batch: {$batchCount} | " . $message);
@@ -893,6 +915,7 @@ class MigrationManager
             'next_batch' => ($state['current_task'] !== 'finished'),
             'progress' => $progress, 
             'batch_count' => $result['count'] ?? 0,
+            'warnings' => $warnings,
             'state' => $state
         ];
     }

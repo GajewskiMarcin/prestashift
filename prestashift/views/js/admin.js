@@ -689,6 +689,12 @@ var PrestaShift = {
                     PrestaShift.log(response.message);
                     $('#current-action').text(response.message);
 
+                    // Rows the target database refused: the migration goes on,
+                    // but they must not pass unnoticed.
+                    $.each(response.warnings || [], function (i, warning) {
+                        PrestaShift.logError(warning);
+                    });
+
                     // Track stats
                     if (response.state && response.state.current_task) {
                         var task = response.state.current_task;

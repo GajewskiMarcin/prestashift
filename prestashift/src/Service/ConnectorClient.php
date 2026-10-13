@@ -39,9 +39,12 @@ class ConnectorClient
 
         if (isset($response['data_b64'])) {
             $decoded = base64_decode($response['data_b64'], true);
-            $data = ($decoded === false) ? [] : json_decode($decoded, true);
+            $data = ($decoded === false) ? null : json_decode($decoded, true);
             if (!is_array($data)) {
-                $data = [];
+                // A connector up to 1.2.0 passes a failed source query on as
+                // "false". Read as an empty result it would end the step
+                // without a word, as if the table had no rows.
+                throw new Exception("Connector Query Error: the source shop could not run the query.");
             }
         } else {
             // Fallback for an older connector that still returns raw rows
