@@ -742,7 +742,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         
         try {
             $manager = new \PrestaShift\Service\MigrationManager();
-            if (!is_array($state) || (!$state['config']['use_bridge'] && empty($state['config']['db_host']))) {
+            if (!is_array($state) || (empty($state['config']['use_bridge']) && empty($state['config']['db_host']))) {
                  // Fallback info for debugging
                  $type = gettype($stateRaw);
                  throw new Exception("Invalid Migration State received. Config missing. Type: $type. Raw: " . substr(print_r($stateRaw, true), 0, 100));
@@ -826,11 +826,24 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
     {
         ob_start();
         try {
+            // Same connection as the rest of the wizard: without the method the
+            // manager fell back to the bridge, and a Direct DB migration got
+            // "403 Forbidden. Check your token." instead of the status list
+            $method = Tools::getValue('connection_method', 'bridge');
             $config = [
-                'bridge_token' => Tools::getValue('bridge_token'),
-                'source_url' => Tools::getValue('source_url'),
+                'connection_method' => $method,
+                'source_url' => rtrim(Tools::getValue('source_url', ''), '/'),
                 'db_prefix' => Tools::getValue('db_prefix', 'ps_')
             ];
+            if ($method === 'direct') {
+                $config['db_host'] = Tools::getValue('db_host', 'localhost');
+                $config['db_port'] = (int)Tools::getValue('db_port', 3306);
+                $config['db_name'] = Tools::getValue('db_name');
+                $config['db_user'] = Tools::getValue('db_user');
+                $config['db_pass'] = Tools::getValue('db_pass', '');
+            } else {
+                $config['bridge_token'] = Tools::getValue('bridge_token');
+            }
 
             $manager = new \PrestaShift\Service\MigrationManager();
             $conn = $manager->getConnection($config);
