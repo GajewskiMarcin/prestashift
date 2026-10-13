@@ -697,7 +697,8 @@ class MigrationManager
                     $state['offset'] = 0;
                     $message = $this->l('Images completed. Starting administration data...');
                 } else {
-                    $state['offset'] += $limit;
+                    // The batch stops when its time is up: fewer images than asked for
+                    $state['offset'] += $result['count'];
                 }
                 break;
 
