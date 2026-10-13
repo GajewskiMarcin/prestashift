@@ -28,7 +28,9 @@ class PsConnector extends Module
         $this->displayName = $this->l('PrestaShift Connector');
         $this->description = $this->l('Secure API endpoint for PrestaShift migration tool.');
 
-        $this->ps_versions_compliancy = array('min' => '1.7', 'max' => _PS_VERSION_);
+        // The connector sits on the old shop: PrestaShop 1.6 and thirtybees
+        // (which reports itself as 1.6.1.999) included
+        $this->ps_versions_compliancy = array('min' => '1.6', 'max' => _PS_VERSION_);
         $this->confirmUninstall = $this->l('Are you sure you want to uninstall? This will break any active migrations.');
     }
 

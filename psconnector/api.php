@@ -20,9 +20,16 @@ ob_end_clean();
 // Override any redirect that PS core may have queued
 header_remove('Location');
 
+// The source shop is the old one: this file has to run on the PHP versions
+// PrestaShop 1.6 shops are still hosted on (5.6 and up), hence no "??".
+function psconnector_post($key, $default = '')
+{
+    return isset($_POST[$key]) ? $_POST[$key] : $default;
+}
+
 // 1. Security Check — Token validation
 $storedToken = Configuration::get('PS_CONNECTOR_TOKEN');
-$receivedToken = $_SERVER['HTTP_X_PS_CONNECTOR_TOKEN'] ?? $_POST['token'] ?? '';
+$receivedToken = isset($_SERVER['HTTP_X_PS_CONNECTOR_TOKEN']) ? $_SERVER['HTTP_X_PS_CONNECTOR_TOKEN'] : psconnector_post('token');
 
 if (empty($storedToken) || empty($receivedToken) || !hash_equals($storedToken, $receivedToken)) {
     header('HTTP/1.1 403 Forbidden');
@@ -32,7 +39,7 @@ if (empty($storedToken) || empty($receivedToken) || !hash_equals($storedToken, $
 }
 
 // 2. Handle Actions
-$action = $_POST['action'] ?? 'test';
+$action = psconnector_post('action', 'test');
 
 try {
     // === TEST — connection check + version info ===
@@ -42,6 +49,8 @@ try {
             'success' => true,
             'version' => '1.2.0',
             'ps_version' => _PS_VERSION_,
+            // thirtybees reports itself as PrestaShop 1.6.1.999
+            'tb_version' => defined('_TB_VERSION_') ? _TB_VERSION_ : '',
             'php_version' => PHP_VERSION,
             'prefix' => _DB_PREFIX_,
             'shop_name' => Configuration::get('PS_SHOP_NAME'),
@@ -58,14 +67,14 @@ try {
         // why raw-JSON transport failed as soon as the migration reached the
         // first HTML-bearing table (categories, CMS, products). Plain `sql` is
         // still accepted as a fallback for older clients.
-        $sqlB64 = $_POST['sql_b64'] ?? '';
+        $sqlB64 = psconnector_post('sql_b64');
         if ($sqlB64 !== '') {
             $sql = base64_decode($sqlB64, true);
             if ($sql === false) {
                 throw new Exception("Invalid base64 SQL payload.");
             }
         } else {
-            $sql = $_POST['sql'] ?? '';
+            $sql = psconnector_post('sql');
         }
 
         if (empty($sql)) {
@@ -83,18 +92,31 @@ try {
 
         $results = Db::getInstance()->executeS($sql);
 
+        // Outside debug mode PrestaShop answers false for a query that failed
+        // (a table this version does not have, for instance). Passed on as
+        // data it would read as "no rows" and the migration would skip the
+        // rest of the table without a word.
+        if ($results === false) {
+            throw new Exception("Query failed: " . Db::getInstance()->getMsgError());
+        }
+
+        $json = json_encode($results);
+        if ($json === false) {
+            throw new Exception("Rows could not be encoded: " . json_last_error_msg());
+        }
+
         header('Content-Type: application/json');
         echo json_encode([
             'success' => true,
             'encoding' => 'base64',
-            'data_b64' => base64_encode(json_encode($results)),
+            'data_b64' => base64_encode($json),
         ]);
         exit;
     }
 
     // === FILE — serve files from source shop ===
     if ($action === 'file') {
-        $path = $_POST['path'] ?? '';
+        $path = psconnector_post('path');
         if (empty($path)) {
             throw new Exception("Empty path.");
         }
@@ -129,9 +151,13 @@ try {
             throw new Exception("File not found: " . $path);
         }
 
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mime = finfo_file($finfo, $realPath);
-        finfo_close($finfo);
+        // fileinfo is an optional extension on old hostings
+        $mime = 'application/octet-stream';
+        if (function_exists('finfo_open')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime = finfo_file($finfo, $realPath);
+            finfo_close($finfo);
+        }
 
         header('Content-Type: ' . $mime);
         header('Content-Length: ' . filesize($realPath));
@@ -141,7 +167,7 @@ try {
 
     // === COUNT — quick record counts for preview ===
     if ($action === 'count') {
-        $table = $_POST['table'] ?? '';
+        $table = psconnector_post('table');
         if (empty($table) || !preg_match('/^[a-zA-Z0-9_]+$/', $table)) {
             throw new Exception("Invalid table name.");
         }
