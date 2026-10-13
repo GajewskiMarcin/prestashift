@@ -119,6 +119,30 @@ class SchemaHelper
     }
 
     /**
+     * Puts an empty text where the given columns are NULL or missing.
+     *
+     * PrestaShop never stores NULL in the text fields of its own objects, and
+     * the back office of PrestaShop 1.7.7+ refuses to open a product, a
+     * combination or an order that has one ("must be of type string, null
+     * given"). NULLs come from sources that lack the column (isbn and mpn in
+     * PrestaShop 1.6) or allow NULL in it (ean13, upc, reference).
+     *
+     * @param array $row
+     * @param array $columns
+     * @return array
+     */
+    public static function blankNulls(array $row, array $columns)
+    {
+        foreach ($columns as $column) {
+            if (!isset($row[$column])) {
+                $row[$column] = '';
+            }
+        }
+
+        return $row;
+    }
+
+    /**
      * Values of an ENUM column type, lower-cased (MySQL compares them
      * case-insensitively); null for any other type.
      */

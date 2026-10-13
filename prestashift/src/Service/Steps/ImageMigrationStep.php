@@ -88,7 +88,7 @@ class ImageMigrationStep
 
         // File: read under the source id, written under the target id
         if ($this->source_url && !$this->skip_files) {
-            $this->transferService->downloadAndSave($this->source_url, $sid, $tid);
+            $this->transferService->downloadAndSave($this->source_url, $sid, $tid, (int)$data['id_product']);
         }
     }
 

@@ -252,11 +252,22 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
 
             $warnings = $this->getVersionWarnings($sourceVersion, $targetVersion);
 
+            // The wizard prints these as HTML and they are whatever the other
+            // shop answered: keep only what a version or a prefix can contain
+            $plain = function ($value) {
+                return preg_replace('/[^0-9A-Za-z._-]/', '', (string)$value);
+            };
+            $prefix = $plain($prefix);
+
+            // thirtybees is a PrestaShop 1.6 for the data, but the operator
+            // knows the shop under its own name and version
+            $sourceLabel = !empty($test['tb_version']) ? 'thirtybees ' . $plain($test['tb_version']) : $plain($sourceVersion);
+
             $methodLabel = ($method === 'direct') ? 'Direct DB' : 'Bridge';
             $response = [
                 'success' => true,
                 'message' => $methodLabel . ' ' . $this->module->l('connected! Prefix detected:', 'AdminPrestaShiftMigrationController') . ' ' . $prefix,
-                'source_version' => $sourceVersion,
+                'source_version' => $sourceLabel,
                 'target_version' => $targetVersion,
                 'warnings' => $warnings,
             ];
@@ -284,6 +295,11 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         if ($srcMajor === 1 && $tgtMajor >= 8) {
             $warnings[] = $this->module->l('redirect_type values will be auto-converted (301→301-product, 302→302-product).', 'AdminPrestaShiftMigrationController');
             $warnings[] = $this->module->l('Column id_product_redirected renamed to id_type_redirected — handled automatically.', 'AdminPrestaShiftMigrationController');
+        }
+
+        // PS 1.6 / thirtybees (1.6.1.999): passwords are md5(cookie key + password)
+        if (preg_match('/^1\.[0-6]\./', (string)$sourceVersion)) {
+            $warnings[] = $this->module->l('Passwords created under PrestaShop 1.6 depend on the cookie key of the source shop. Customers and employees can log in here with their old password only if this shop uses the same cookie key — otherwise they must reset it. See the README.', 'AdminPrestaShiftMigrationController');
         }
 
         // PS 1.7 or 8 → 9

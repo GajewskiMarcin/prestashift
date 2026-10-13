@@ -91,6 +91,13 @@ class LocalizationMigrationStep
 
             $trow = IdMapper::row('currency', $row);
             $tid = (int)$trow['id_currency'];
+            // Before 1.7.6 the numeric code and the decimals had other names
+            if (!isset($trow['numeric_iso_code']) && !empty($row['iso_code_num'])) {
+                $trow['numeric_iso_code'] = $row['iso_code_num'];
+            }
+            if (!isset($trow['precision']) && isset($row['decimals'])) {
+                $trow['precision'] = (int)$row['decimals'] ? 2 : 0;
+            }
             SchemaHelper::upsert('currency', $trow, ['id_currency']);
 
             if (SchemaHelper::hasTable('currency_lang')) {
@@ -98,6 +105,9 @@ class LocalizationMigrationStep
                     $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}currency_lang` WHERE id_currency = $sid")->fetchAll(PDO::FETCH_ASSOC));
                 } catch (\Exception $e) {
                     $langs = []; // source older than 1.7.6
+                }
+                if (empty($langs)) {
+                    $langs = $this->langRowsFromCurrency($row);
                 }
                 foreach ($langs as $l) {
                     $l['id_currency'] = $tid;
@@ -107,6 +117,25 @@ class LocalizationMigrationStep
 
             Db::getInstance()->execute("REPLACE INTO `" . _DB_PREFIX_ . "currency_shop` (id_currency, id_shop, conversion_rate) VALUES ($tid, $shopId, " . (float)$row['conversion_rate'] . ")");
         }
+    }
+
+    /**
+     * Before PrestaShop 1.7.6 a currency had one name and one sign, kept in
+     * `currency` itself. Without rows in currency_lang the new currency shows
+     * up with no name and no symbol, so one row per target language is built.
+     */
+    private function langRowsFromCurrency(array $row)
+    {
+        $rows = [];
+        foreach (\Language::getIDs(false) as $idLang) {
+            $rows[] = [
+                'id_lang' => (int)$idLang,
+                'name' => !empty($row['name']) ? $row['name'] : $row['iso_code'],
+                'symbol' => !empty($row['sign']) ? $row['sign'] : $row['iso_code'],
+            ];
+        }
+
+        return $rows;
     }
 
     private function reportLanguages()

@@ -114,6 +114,7 @@ class ProductMigrationStep
             'price' => $data['price'],
             'wholesale_price' => $data['wholesale_price'],
             'unity' => $data['unity'],
+            'unit_price' => $this->unitPrice($data),
             'unit_price_ratio' => $data['unit_price_ratio'],
             'additional_shipping_cost' => $data['additional_shipping_cost'],
             'reference' => $data['reference'],
@@ -133,7 +134,7 @@ class ProductMigrationStep
             'redirect_type' => $redirectType,
             'available_for_order' => $data['available_for_order'],
             'available_date' => $data['available_date'],
-            'show_condition' => $data['show_condition'],
+            'show_condition' => isset($data['show_condition']) ? $data['show_condition'] : 0, // PS 1.6 has no such column
             'condition' => $data['condition'],
             'show_price' => $data['show_price'],
             'indexed' => 1,
@@ -151,6 +152,7 @@ class ProductMigrationStep
         ];
 
         $row = IdMapper::row('product', $productData);
+        $row = SchemaHelper::blankNulls($row, ['ean13', 'isbn', 'upc', 'mpn', 'reference']);
         $tid = (int)$row['id_product'];
 
         // Redirect target: a product or a category depending on the type
@@ -200,6 +202,21 @@ class ProductMigrationStep
         }
 
         return 'standard';
+    }
+
+    /**
+     * PrestaShop 8+ stores the unit price itself; older versions only keep
+     * the ratio between the price and the unit price. Without the conversion
+     * a product sold "per kg" arrives with a unit price of zero.
+     */
+    private function unitPrice($data)
+    {
+        if (isset($data['unit_price'])) {
+            return $data['unit_price'];
+        }
+        $ratio = (float)$data['unit_price_ratio'];
+
+        return $ratio != 0 ? (float)$data['price'] / $ratio : 0;
     }
 
     private function importProductLang($sid, $tid)
@@ -256,6 +273,7 @@ class ProductMigrationStep
             'price' => (float)$p['price'],
             'wholesale_price' => (float)$p['wholesale_price'],
             'unity' => $p['unity'],
+            'unit_price' => (float)$p['unit_price'],
             'unit_price_ratio' => (float)$p['unit_price_ratio'],
             'additional_shipping_cost' => (float)$p['additional_shipping_cost'],
             'customizable' => (int)$p['customizable'],

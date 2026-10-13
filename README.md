@@ -1,6 +1,6 @@
 # PrestaShift — PrestaShop Migration Module
 
-Professional data migration tool for PrestaShop. Migrate your shop data between PrestaShop 1.7, 8, and 9 with ease.
+Professional data migration tool for PrestaShop. Migrate your shop data from PrestaShop 1.6, 1.7, 8, 9 or thirtybees to PrestaShop 1.7, 8, and 9 with ease.
 
 ## Features
 
@@ -8,6 +8,8 @@ Professional data migration tool for PrestaShop. Migrate your shop data between 
 - **Two connection modes** — Bridge Connector (works across servers) or Direct Database (faster, same server)
 - **Version-aware** — automatic detection of source/target versions with compatibility warnings
 - **PS 1.7 → 8/9 transformations** — `redirect_type`, `id_type_redirected` auto-converted
+- **PS 1.6 and thirtybees sources** — see [Migrating from PrestaShop 1.6 or thirtybees](#migrating-from-prestashop-16-or-thirtybees)
+- **Nothing lost in silence** — a row the new shop refuses is reported in the migration log, with the database's reason
 - **Incremental sync** — migrate only changes since last sync
 - **Batch processing** — configurable batch sizes with pause/resume support
 - **Image transfer** — downloads images and generates all thumbnail sizes
@@ -40,9 +42,8 @@ Professional data migration tool for PrestaShop. Migrate your shop data between 
 
 ## Requirements
 
-- **Target shop:** PrestaShop 1.7+ (where PrestaShift is installed)
-- **Source shop:** PrestaShop 1.7+ (where PSConnector is installed)
-- PHP 7.4+ with cURL extension
+- **Target shop:** PrestaShop 1.7+ (where PrestaShift is installed), PHP 7.4+ with cURL extension
+- **Source shop:** PrestaShop 1.6+ or thirtybees (where PSConnector is installed), PHP 5.6+
 - MySQL 5.7+ / MariaDB 10.3+
 
 ## Installation
@@ -66,7 +67,7 @@ Professional data migration tool for PrestaShop. Migrate your shop data between 
 ## Architecture
 
 ```
-Source Shop (PS 1.7/8)          Target Shop (PS 8/9)
+Source Shop (PS 1.6/1.7/8)      Target Shop (PS 8/9)
 ┌─────────────────┐            ┌──────────────────┐
 │   PSConnector    │◄──HTTP──► │   PrestaShift     │
 │   (read-only     │   Bridge  │   (migration      │
@@ -78,10 +79,39 @@ PSConnector exposes a secure, read-only API endpoint. PrestaShift connects to it
 
 Alternative: Direct Database connection (PDO) for same-server migrations — faster, no bridge needed.
 
+## Migrating from PrestaShop 1.6 or thirtybees
+
+The old shop only needs the connector (or a database the new shop can reach). What differs between
+1.6 and the newer versions is converted on the way:
+
+| In the old shop | In the new shop |
+|-----------------|-----------------|
+| Columns the old version lacks (`show_condition`, `isbn`, `mpn`, `state`…) | The default of the new version |
+| Product redirect `301` / `302` / none | `301-product` / `302-product` / the shop's default redirect |
+| Unit price kept as a ratio of the price | The unit price itself (PrestaShop 8+) |
+| Store name, address and opening hours in `store` | One row per language in `store_lang`, hours as JSON |
+| Currency name and sign in `currency` | One row per language in `currency_lang` |
+| Images stored flat as `<product>-<image>.jpg` (legacy images) | The standard image folders |
+
+thirtybees is read as what it is for the data: a PrestaShop 1.6.1. Tables that only thirtybees has
+(blog, store credit…) are not migrated.
+
+**Passwords.** PrestaShop 1.6 stores a password as `md5(cookie key + password)`. The new shop can
+still check it, but only with the *same* cookie key. Before the shop goes live, copy `_COOKIE_KEY_`
+from `config/settings.inc.php` of the old shop into `cookie_key` in `app/config/parameters.php` of
+the new one (this logs everybody out and invalidates existing back-office links, which does not
+matter on a shop that is not live yet). Otherwise customers and employees coming from 1.6 have to
+use *Forgot your password?*. Accounts of a thirtybees shop that already hold a bcrypt hash are not
+affected.
+
+**Zones.** Carrier zones are matched by name. thirtybees calls the European zone `Europe (EU)`:
+pair it with `Europe` in the zone mapping of the Options step, or its delivery prices are skipped.
+
 ## Security
 
 - Token-based authentication (64-char hex)
-- Connector is **read-only** — write operations blocked
+- Connector is **read-only** — it runs one single `SELECT` / `SHOW` statement per request; a second
+  statement, a comment or file access (`INTO OUTFILE`, `LOAD_FILE`) is refused
 - File access restricted to `img/`, `download/`, `upload/` directories
 - Path traversal protection with `realpath()` validation
 - Timing-safe token comparison (`hash_equals`)

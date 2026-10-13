@@ -53,6 +53,7 @@ class FeatureValueMigrationStep
             'id_feature_value' => $sid,
             'id_feature' => $data['id_feature'],
             'custom' => (int)$data['custom'],
+            'position' => isset($data['position']) ? (int)$data['position'] : 0, // thirtybees, PrestaShop 9
         ]);
         if ((int)$row['id_feature'] <= 0) {
             return;

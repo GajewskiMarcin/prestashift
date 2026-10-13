@@ -220,6 +220,9 @@ class OrderMigrationStep
         foreach ($details as $d) {
             $d['id_order'] = $sid;
             $row = IdMapper::row('order_detail', $d);
+            $row = SchemaHelper::blankNulls($row, [
+                'product_reference', 'product_supplier_reference', 'product_ean13', 'product_isbn', 'product_upc', 'product_mpn',
+            ]);
             $row['id_warehouse'] = 0;
             // Products that no longer exist keep their name/price snapshot
             // (as in the source, where deleted products keep id 0 too)
