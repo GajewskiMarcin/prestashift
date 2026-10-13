@@ -35,8 +35,12 @@ function psconnector_post($key, $default = '')
  * and SELECT ... INTO OUTFILE writes a file on the database server.
  *
  * True only for one single SELECT or SHOW statement that cannot write.
+ *
+ * $backslashEscapes: whether MySQL reads a backslash inside quotes as an
+ * escape (it does, unless the session runs in NO_BACKSLASH_ESCAPES mode). The
+ * check has to read the quotes exactly as MySQL will.
  */
-function psconnector_is_read_only($sql)
+function psconnector_is_read_only($sql, $backslashEscapes = true)
 {
     if (!is_string($sql) || !preg_match('/^\s*(SELECT|SHOW)\b/i', $sql)) {
         return false;
@@ -54,7 +58,7 @@ function psconnector_is_read_only($sql)
                 $quote = $char;
             }
             $bare .= $char;
-        } elseif ($char === '\\' && $quote !== '`') {
+        } elseif ($char === '\\' && $quote !== '`' && $backslashEscapes) {
             $i++; // escaped character
         } elseif ($char === $quote) {
             if ($i + 1 < $length && $sql[$i + 1] === $quote) {
@@ -75,7 +79,7 @@ function psconnector_is_read_only($sql)
     }
 
     // Reading or writing files on the database server
-    return !preg_match('/\bINTO\s+(OUTFILE|DUMPFILE)\b|\bLOAD_FILE\s*\(/i', $bare);
+    return !preg_match('/\b(OUTFILE|DUMPFILE|LOAD_FILE)\b/i', $bare);
 }
 
 // 1. Security Check — Token validation
@@ -133,7 +137,8 @@ try {
         }
 
         // Security: block write operations — connector is READ-ONLY
-        if (!psconnector_is_read_only($sql)) {
+        $sqlMode = (string)Db::getInstance()->getValue('SELECT @@SESSION.sql_mode');
+        if (!psconnector_is_read_only($sql, stripos($sqlMode, 'NO_BACKSLASH_ESCAPES') === false)) {
             throw new Exception("Write operations are not allowed. Connector is read-only.");
         }
 
