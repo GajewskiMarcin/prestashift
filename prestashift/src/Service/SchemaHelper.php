@@ -16,7 +16,7 @@ class SchemaHelper
 {
     private static $columnsCache = [];
 
-    /** @var array table => [column => ['type', 'nullable', 'default', 'auto']] */
+    /** @var array table => [column => ['type', 'nullable', 'default']] */
     private static $definitionsCache = [];
 
     /** @var array table => ['count' => int, 'error' => string] — rows the target refused in this request */
@@ -68,7 +68,6 @@ class SchemaHelper
                     'type' => (string)$row['Type'],
                     'nullable' => $row['Null'] === 'YES',
                     'default' => $row['Default'],
-                    'auto' => stripos((string)$row['Extra'], 'auto_increment') !== false,
                 ];
             }
         }
@@ -306,7 +305,10 @@ class SchemaHelper
 
         if (!$done) {
             if (!isset(self::$failures[$table])) {
-                self::$failures[$table] = ['count' => 0, 'error' => $error];
+                // MySQL quotes the refused value in its message, and that value
+                // is data of the source shop: wherever the message ends up
+                // being shown, it must not be readable as markup
+                self::$failures[$table] = ['count' => 0, 'error' => str_replace(['<', '>'], '', $error)];
             }
             self::$failures[$table]['count']++;
         }
