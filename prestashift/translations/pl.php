@@ -392,6 +392,7 @@ $translations = array(
     'Rate limit reached — waiting before retrying the batch...' => 'Osiągnięto limit tempa serwera — czekam przed ponowieniem paczki...',
     '%1$d row(s) could not be written to table %2$s: %3$s' => 'Nie udało się zapisać %1$d wiersza(-y) w tabeli %2$s: %3$s',
     'Migration finished, but %d row(s) could not be written. See the messages above.' => 'Migracja zakończona, ale nie udało się zapisać %d wiersza(-y). Zobacz komunikaty powyżej.',
+    'Task %s is not recorded as synchronised: the next incremental migration will read it again.' => 'Zadanie %s nie zostaje zapisane jako zsynchronizowane: następna migracja przyrostowa odczyta je ponownie.',
     'Passwords created under PrestaShop 1.6 depend on the cookie key of the source shop. Customers and employees can log in here with their old password only if this shop uses the same cookie key — otherwise they must reset it. See the README.' => 'Hasła utworzone w PrestaShop 1.6 zależą od klucza cookie sklepu źródłowego. Klienci i pracownicy zalogują się tutaj starym hasłem tylko wtedy, gdy ten sklep używa tego samego klucza cookie — w przeciwnym razie muszą je zresetować. Zobacz README.',
 
     // === 1.3.0: id map (migration into a shop with data) ===
@@ -762,6 +763,7 @@ $phraseMap = array(
     'Rate limit reached — waiting before retrying the batch...' => array('adminprestashiftmigrationcontroller'),
     '%1$d row(s) could not be written to table %2$s: %3$s' => array('migrationmanager'),
     'Migration finished, but %d row(s) could not be written. See the messages above.' => array('migrationmanager'),
+    'Task %s is not recorded as synchronised: the next incremental migration will read it again.' => array('migrationmanager'),
     'Passwords created under PrestaShop 1.6 depend on the cookie key of the source shop. Customers and employees can log in here with their old password only if this shop uses the same cookie key — otherwise they must reset it. See the README.' => array('adminprestashiftmigrationcontroller'),
 );
 

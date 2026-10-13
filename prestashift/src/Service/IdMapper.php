@@ -1124,7 +1124,7 @@ class IdMapper
             try {
                 $rows = self::$conn->query("SELECT `name`, `value` FROM `" . self::$prefix . "configuration`
                     WHERE `name` IN ('PS_ROOT_CATEGORY','PS_HOME_CATEGORY','PS_UNIDENTIFIED_GROUP','PS_GUEST_GROUP','PS_CUSTOMER_GROUP',
-                    'PS_LANG_DEFAULT','PS_CURRENCY_DEFAULT','PS_COUNTRY_DEFAULT')
+                    'PS_LANG_DEFAULT','PS_CURRENCY_DEFAULT','PS_COUNTRY_DEFAULT','PS_TIMEZONE')
                     ORDER BY (`id_shop` IS NULL) DESC, (`id_shop_group` IS NULL) DESC")->fetchAll(PDO::FETCH_ASSOC);
                 foreach ($rows as $row) {
                     if (!isset(self::$dict['source_config'][$row['name']])) {

@@ -353,5 +353,6 @@ return array(
     'Rate limit reached — waiting before retrying the batch...' => array('adminprestashiftmigrationcontroller'),
     '%1$d row(s) could not be written to table %2$s: %3$s' => array('migrationmanager'),
     'Migration finished, but %d row(s) could not be written. See the messages above.' => array('migrationmanager'),
+    'Task %s is not recorded as synchronised: the next incremental migration will read it again.' => array('migrationmanager'),
     'Passwords created under PrestaShop 1.6 depend on the cookie key of the source shop. Customers and employees can log in here with their old password only if this shop uses the same cookie key — otherwise they must reset it. See the README.' => array('adminprestashiftmigrationcontroller'),
 );

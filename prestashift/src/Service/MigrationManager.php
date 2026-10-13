@@ -19,6 +19,12 @@ class MigrationManager
     private $db_connection;
     private $steps = [];
 
+    /** @var array task => date, sync dates of the running batch that are not written yet */
+    private $pendingSync = [];
+
+    /** @var string identity of the source shop of the running migration (IdMapper::fingerprint) */
+    private $sourceKey = '';
+
     /**
      * Ordered sequence of all migration tasks
      */
@@ -101,26 +107,118 @@ class MigrationManager
     }
 
     /**
-     * Get granular sync history from Configuration
+     * Sync dates: source shop => task => date.
+     *
+     * Up to 1.4.2 they were kept in PRESTASHIFT_SYNC_HISTORY, one date per
+     * task whatever the source, and written for every task that reached its
+     * end, even when the target had refused its rows. Those dates cannot be
+     * trusted, so they are left behind: the first incremental migration after
+     * the update reads everything once, later ones go by the dates kept here.
      */
-    public function getSyncHistory()
+    const SYNC_KEY = 'PRESTASHIFT_SYNC_DATES';
+
+    private function readSyncDates()
     {
-        $data = \Configuration::get('PRESTASHIFT_SYNC_HISTORY');
-        if (empty($data)) {
-            return [];
-        }
-        $history = json_decode($data, true);
-        return is_array($history) ? $history : [];
+        $dates = json_decode((string)\Configuration::get(self::SYNC_KEY), true);
+
+        return is_array($dates) ? $dates : [];
     }
 
     /**
-     * Update sync history for a specific entity
+     * Get granular sync history from Configuration: the dates of the source
+     * being migrated. What was read from one shop says nothing about another
+     * one migrated into the same target.
+     */
+    public function getSyncHistory()
+    {
+        $dates = $this->readSyncDates();
+
+        return isset($dates[$this->sourceKey]) && is_array($dates[$this->sourceKey]) ? $dates[$this->sourceKey] : [];
+    }
+
+    /**
+     * Update sync history for a specific entity.
+     *
+     * The task is only noted here. Its date is written at the end of the batch
+     * and only when the task lost no row (see processBatch): a task recorded
+     * as synchronised although its rows were refused is skipped by every later
+     * incremental migration, as "already migrated".
+     *
+     * The date that gets written is the moment the task started (sourceNow()),
+     * not $date, which is the moment it ended.
      */
     public function updateSyncHistory($entity, $date)
     {
-        $history = $this->getSyncHistory();
-        $history[$entity] = $date;
-        \Configuration::updateValue('PRESTASHIFT_SYNC_HISTORY', json_encode($history));
+        $this->pendingSync[$entity] = $date;
+    }
+
+    /**
+     * @param string $startedAt When the task started, in the source's time
+     */
+    private function commitSyncHistory($startedAt)
+    {
+        if (empty($this->pendingSync)) {
+            return;
+        }
+        $dates = $this->readSyncDates();
+        foreach (array_keys($this->pendingSync) as $entity) {
+            $dates[$this->sourceKey][$entity] = $startedAt;
+        }
+        $this->pendingSync = [];
+        \Configuration::updateValue(self::SYNC_KEY, json_encode($dates));
+    }
+
+    /**
+     * The present moment as the source shop would write it in date_upd: the
+     * clock of its database, the time zone of the shop. Taken when a task
+     * starts, it becomes the sync date of that task.
+     *
+     * The end of the task is too late: a row that changes while the task runs,
+     * after it was read, would be older than the sync date and never read
+     * again. And the clock or the time zone of this shop need not be the
+     * source's. One minute is taken off, so that a row saved in that very
+     * moment is read twice rather than never.
+     */
+    private function sourceNow($conn)
+    {
+        $time = time();
+        try {
+            $utc = $conn->query('SELECT UTC_TIMESTAMP()')->fetchColumn();
+            if ($utc && strtotime($utc . ' UTC')) {
+                $time = strtotime($utc . ' UTC');
+            }
+        } catch (\Exception $e) {
+            // this shop's clock, then
+        }
+
+        try {
+            $zone = new \DateTimeZone((string)IdMapper::sourceConfig('PS_TIMEZONE', date_default_timezone_get()));
+        } catch (\Exception $e) {
+            $zone = new \DateTimeZone(date_default_timezone_get());
+        }
+
+        $now = new \DateTime('@' . ($time - 60));
+        $now->setTimezone($zone);
+
+        return $now->format('Y-m-d H:i:s');
+    }
+
+    /**
+     * Forgets the sync dates of the tasks of the given scopes, for every
+     * source. "Clean target data" empties their tables: whatever an earlier
+     * run recorded as synchronised is no longer in the shop.
+     */
+    public function forgetSyncHistory($scope)
+    {
+        $dates = $this->readSyncDates();
+        foreach ($dates as $source => $tasks) {
+            foreach (self::$taskScopeMap as $task => $scopeKey) {
+                if (is_array($scope) && !empty($scope[$scopeKey])) {
+                    unset($dates[$source][$task]);
+                }
+            }
+        }
+        \Configuration::updateValue(self::SYNC_KEY, json_encode($dates));
     }
 
     /**
@@ -236,6 +334,8 @@ class MigrationManager
         $log->setEnabled($debugMode);
         
         $incremental = !empty($config['options']['incremental']);
+        // Same identity as the id map (IdMapper::begin)
+        $this->sourceKey = isset($config['id_source']) ? (string)$config['id_source'] : md5((string)$prefix);
         $syncHistory = $this->getSyncHistory();
         $task = isset($state['current_task']) ? $state['current_task'] : 'customers';
 
@@ -271,6 +371,11 @@ class MigrationManager
         // Source → target id map (persisted). Same engine with and without
         // "Clean target data": after cleaning the offsets are 0, so ids stay 1:1.
         IdMapper::begin($conn, $prefix, $config);
+
+        // First batch of a task: note when it starts (its future sync date)
+        if ($task !== 'finished' && (!isset($state['task_started']['task']) || $state['task_started']['task'] !== $task)) {
+            $state['task_started'] = ['task' => $task, 'at' => $this->sourceNow($conn)];
+        }
 
         $result = ['count' => 0, 'finished' => false];
         $message = '';
@@ -807,6 +912,7 @@ class MigrationManager
         // Rows the target database refused. They are skipped, never fatal — but
         // the operator has to see them, or a missing entity looks like success.
         $warnings = [];
+        $taskErrors = isset($state['task_errors']) ? (int)$state['task_errors'] : 0;
         foreach (SchemaHelper::pullFailures() as $table => $failure) {
             $warnings[] = sprintf(
                 $this->l('%1$d row(s) could not be written to table %2$s: %3$s'),
@@ -815,7 +921,26 @@ class MigrationManager
                 $failure['error']
             );
             $state['write_errors'] = (isset($state['write_errors']) ? (int)$state['write_errors'] : 0) + $failure['count'];
+            $taskErrors += $failure['count'];
         }
+
+        // The task ended with this batch. It is recorded as synchronised only
+        // if every one of its rows was written; otherwise its previous sync
+        // date stays, and the next incremental migration reads it again.
+        if ($state['current_task'] !== $task) {
+            if ($taskErrors === 0) {
+                $this->commitSyncHistory($state['task_started']['at']);
+            } else {
+                $this->pendingSync = [];
+                $warnings[] = sprintf(
+                    $this->l('Task %s is not recorded as synchronised: the next incremental migration will read it again.'),
+                    $task
+                );
+            }
+            $taskErrors = 0;
+        }
+        $state['task_errors'] = $taskErrors;
+
         if ($state['current_task'] === 'finished' && !empty($state['write_errors'])) {
             $warnings[] = sprintf(
                 $this->l('Migration finished, but %d row(s) could not be written. See the messages above.'),

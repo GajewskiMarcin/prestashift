@@ -533,6 +533,8 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             if (!empty($config['options']['clean_target'])) {
                 $cleanup = new \PrestaShift\Service\CleanupService();
                 $cleanup->cleanTargetShop($config['scope']);
+                // What earlier runs recorded as synchronised has just been deleted
+                $manager->forgetSyncHistory($config['scope']);
             }
             
             // CLEAR PREVIOUS SAVED STATE if this is a fresh start
