@@ -92,25 +92,38 @@ class SpecificPriceMigrationStep
             return;
         }
 
+        // The table holds one row per product and has no shop column in any
+        // PrestaShop version
         try {
             $rows = $this->db_connection->query("SELECT id_product, priority FROM `{$this->prefix}specific_price_priority`
-                WHERE id_product IN (" . implode(',', $sourceProducts) . ") ORDER BY id_shop ASC")->fetchAll(PDO::FETCH_ASSOC);
+                WHERE id_product IN (" . implode(',', $sourceProducts) . ")")->fetchAll(PDO::FETCH_ASSOC);
         } catch (\Exception $e) {
             return;
         }
 
-        $shopId = SchemaHelper::getTargetShopId();
         foreach ($rows as $r) {
             $idProduct = IdMapper::ref('product', (int)$r['id_product']);
-            if ($idProduct <= 0) {
+            $priority = $this->portablePriority($r['priority']);
+            if ($idProduct <= 0 || $priority === '') {
                 continue;
             }
-            Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "specific_price_priority` WHERE id_product = $idProduct AND id_shop = $shopId");
+            Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "specific_price_priority` WHERE id_product = $idProduct");
             SchemaHelper::insertIgnore('specific_price_priority', [
-                'id_shop' => $shopId,
                 'id_product' => $idProduct,
-                'priority' => $r['priority'],
+                'priority' => $priority,
             ]);
         }
+    }
+
+    /**
+     * PrestaShop knows four priorities. thirtybees stores more of them
+     * (quantity_discount, id_customer), and one unknown name is enough for the
+     * product page of PrestaShop 8/9 to fail with "Invalid priority value".
+     */
+    private function portablePriority($priority)
+    {
+        $known = ['id_shop', 'id_currency', 'id_country', 'id_group'];
+
+        return implode(';', array_unique(array_intersect(explode(';', (string)$priority), $known)));
     }
 }
