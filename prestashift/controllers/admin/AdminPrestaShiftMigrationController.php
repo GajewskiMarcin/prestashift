@@ -76,6 +76,8 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                 'post_tasks_failed' => $this->module->l('Post-migration tasks failed — please clear cache manually.', 'AdminPrestaShiftMigrationController'),
                 'error_prefix' => $this->module->l('Error: ', 'AdminPrestaShiftMigrationController'),
                 'network_error' => $this->module->l('Communication Error (Network/Timeout). Click Resume to retry this batch.', 'AdminPrestaShiftMigrationController'),
+                'retry_wait' => $this->module->l('Trying again in %1$d seconds (attempt %2$d of %3$d)...', 'AdminPrestaShiftMigrationController'),
+                'retry_gave_up' => $this->module->l('Still failing after %d attempts — migration paused. Click Resume to try again.', 'AdminPrestaShiftMigrationController'),
                 'confirm_clear_session' => $this->module->l('Are you sure you want to clear the saved session?', 'AdminPrestaShiftMigrationController'),
                 // Entity labels used in preview and report tables
                 'lbl_products' => $this->module->l('Products', 'AdminPrestaShiftMigrationController'),
@@ -480,6 +482,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         });
 
         ob_start();
+        $this->holdMigrationLock();
 
         $method = Tools::getValue('connection_method', 'bridge');
         $config = [
@@ -749,6 +752,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         });
 
         ob_start();
+        $this->holdMigrationLock();
         $stateRaw = Tools::getValue('state');
         
         // Decode JSON state if string (sent via JSON.stringify in JS)
@@ -768,15 +772,18 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $response = $manager->processBatch($state);
             
         } catch (Throwable $e) {
-            // TELEMETRY: If user agreed, send the error report
-            $config = $this->getMigrationConfig($state);
-            $telemetry = new \PrestaShift\Service\TelemetryService();
-            $telemetry->sendErrorReport([
-                'message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString()
-            ], $config);
+            // TELEMETRY: If user agreed, send the error report — once per
+            // failure, not for every automatic attempt that repeats it
+            if (!(int)Tools::getValue('attempt')) {
+                $config = $this->getMigrationConfig($state);
+                $telemetry = new \PrestaShift\Service\TelemetryService();
+                $telemetry->sendErrorReport([
+                    'message' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'trace' => $e->getTraceAsString()
+                ], $config);
+            }
 
             $response = [
                 'success' => false,
@@ -789,6 +796,38 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         ob_end_clean();
         header('Content-Type: application/json');
         die($json);
+    }
+
+    /**
+     * One migration request at a time. A request the browser gave up on
+     * (gateway timeout, dropped connection) keeps running on the server while
+     * the browser sends the same batch again. Without the lock every new
+     * attempt would start the same work next to the ones still running, on a
+     * server that is already too slow, and two of them reaching the same
+     * record together can give it two ids. The lock ends with the database
+     * connection of this request, so a request that crashes cannot leave it
+     * behind.
+     */
+    private function holdMigrationLock()
+    {
+        try {
+            $held = Db::getInstance()->getValue("SELECT GET_LOCK('" . pSQL('prestashift_' . md5(_DB_NAME_ . _DB_PREFIX_)) . "', 0)", false);
+        } catch (Exception $e) {
+            return;
+        }
+
+        // Anything but a plain "no" (NULL: the server could not tell) must not block the migration
+        if ((string)$held !== '0') {
+            return;
+        }
+
+        ob_end_clean();
+        header('Content-Type: application/json');
+        die(json_encode([
+            'success' => false,
+            'busy' => true,
+            'message' => $this->module->l('The shop is still working on the previous migration request. Waiting for it to finish...', 'AdminPrestaShiftMigrationController'),
+        ]));
     }
 
     private function getMigrationConfig($state = null)

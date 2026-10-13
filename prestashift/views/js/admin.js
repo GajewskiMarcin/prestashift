@@ -8,6 +8,12 @@ var PrestaShift = {
     optionsData: null,
     isPaused: false,
     pendingNextBatch: null,
+    // A failed batch is tried again every retryDelay ms, maxRetries times
+    // (about one minute), before the migration stops.
+    retryDelay: 5000,
+    maxRetries: 12,
+    failedAttempts: 0,
+    lastRetryError: null,
     stats: {
         products: 0,
         orders: 0,
@@ -679,6 +685,12 @@ var PrestaShift = {
     runBatch: function (data) {
         var ajaxData = (typeof data === 'string') ? data + '&ajax=true&action=start_migration' : data;
 
+        // Tells the server this is a repeated attempt: the failure was
+        // already reported the first time.
+        if (PrestaShift.failedAttempts && typeof ajaxData !== 'string') {
+            ajaxData = $.extend({}, ajaxData, { attempt: PrestaShift.failedAttempts });
+        }
+
         $.ajax({
             url: controller_url,
             type: 'POST',
@@ -686,6 +698,8 @@ var PrestaShift = {
             dataType: 'json',
             success: function (response) {
                 if (response.success) {
+                    PrestaShift.failedAttempts = 0;
+                    PrestaShift.lastRetryError = null;
                     PrestaShift.log(response.message);
                     $('#current-action').text(response.message);
 
@@ -738,15 +752,24 @@ var PrestaShift = {
                     // Rate limit: the connector already retried server-side and
                     // still got 429. Wait longer (the limit window may be
                     // per-minute) and auto-resume the same batch — writes are
-                    // idempotent, so re-running is safe. Any other error stops.
+                    // idempotent, so re-running is safe. Any other error is
+                    // tried again a few times, then stops.
                     if (response.message && /\b429\b|rate-limit|too many requests/i.test(response.message)) {
                         PrestaShift.logError(response.message);
                         PrestaShift.log(PrestaShift.t('rate_limit_wait'));
                         setTimeout(function () {
                             PrestaShift.runBatch(data);
                         }, 45000);
+                    } else if (response.busy) {
+                        // The shop is still working on the request this one
+                        // repeats: nothing failed, so no attempt is used up.
+                        if (PrestaShift.lastRetryError !== response.message) {
+                            PrestaShift.lastRetryError = response.message;
+                            PrestaShift.log(PrestaShift.escapeHtml(response.message));
+                        }
+                        PrestaShift.runBatchLater(data);
                     } else {
-                        PrestaShift.logError(PrestaShift.t('error_prefix') + response.message);
+                        PrestaShift.retryBatch(data, PrestaShift.t('error_prefix') + response.message);
                     }
                 }
             },
@@ -764,18 +787,59 @@ var PrestaShift = {
                 if (jqXHR && jqXHR.status) {
                     detail = 'HTTP ' + jqXHR.status + (detail ? ' — ' + detail : '');
                 }
-                PrestaShift.logError(PrestaShift.t('network_error') + (detail ? ' [' + detail + ']' : ''));
-                PrestaShift.isPaused = true;
-                PrestaShift.pendingNextBatch = ajaxData;
-
-                $('#btn-pause-migration')
-                    .html('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play" style="margin-right: 8px;"><polygon points="5 3 19 12 5 21 5 3"/></svg> Resume Migration')
-                    .removeClass('ps-opacity-50')
-                    .prop('disabled', false)
-                    .show();
-                $('#finish-later-area').css('visibility', 'visible');
+                PrestaShift.retryBatch(data, detail || PrestaShift.t('err_no_answer'));
             }
         });
+    },
+
+    // A failed batch is tried again before the migration stops: a dropped
+    // connection, a busy database or a gateway timeout usually pass on their
+    // own. Running the same batch again is safe — its writes are idempotent,
+    // and the server runs one migration request at a time.
+    retryBatch: function (data, message) {
+        if (PrestaShift.failedAttempts >= PrestaShift.maxRetries) {
+            PrestaShift.failedAttempts = 0;
+            PrestaShift.lastRetryError = null;
+            PrestaShift.logError(message);
+            PrestaShift.logError(PrestaShift.t('retry_gave_up').replace('%d', PrestaShift.maxRetries));
+            PrestaShift.isPaused = true;
+            PrestaShift.waitForResume(data);
+            return;
+        }
+
+        PrestaShift.failedAttempts++;
+        // The same error twelve times over would bury the rest of the log
+        if (PrestaShift.lastRetryError !== message) {
+            PrestaShift.lastRetryError = message;
+            PrestaShift.logError(message);
+        }
+        PrestaShift.log(PrestaShift.t('retry_wait')
+            .replace('%1$d', Math.round(PrestaShift.retryDelay / 1000))
+            .replace('%2$d', PrestaShift.failedAttempts)
+            .replace('%3$d', PrestaShift.maxRetries));
+        PrestaShift.runBatchLater(data);
+    },
+
+    runBatchLater: function (data) {
+        setTimeout(function () {
+            if (PrestaShift.isPaused) {
+                PrestaShift.log(PrestaShift.t('migration_paused'));
+                PrestaShift.waitForResume(data);
+                return;
+            }
+            PrestaShift.runBatch(data);
+        }, PrestaShift.retryDelay);
+    },
+
+    waitForResume: function (data) {
+        PrestaShift.pendingNextBatch = data;
+
+        $('#btn-pause-migration')
+            .html('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play" style="margin-right: 8px;"><polygon points="5 3 19 12 5 21 5 3"/></svg> Resume Migration')
+            .removeClass('ps-opacity-50')
+            .prop('disabled', false)
+            .show();
+        $('#finish-later-area').css('visibility', 'visible');
     },
 
     log: function (msg) {

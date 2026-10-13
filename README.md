@@ -12,6 +12,7 @@ Professional data migration tool for PrestaShop. Migrate your shop data from Pre
 - **Nothing lost in silence** — a row the new shop refuses is reported in the migration log, with the database's reason
 - **Incremental sync** — migrate only changes since last sync
 - **Batch processing** — configurable batch sizes with pause/resume support
+- **Automatic retries** — a batch that fails is tried again every 5 seconds for about a minute before the migration stops and waits for you
 - **Image transfer** — downloads images and generates all thumbnail sizes
 - **Multistore support** — choose target shop ID
 - **Pre-flight checks** — validates PHP limits, disk space, cURL before starting
