@@ -37,7 +37,7 @@ class MigrationManager
         'employees',
         'contacts', 'stores',
         'cart_rules', 'messages', 'carriers',
-        'orders', 'order_payment', 'order_slip', 'cart',
+        'orders', 'order_payment', 'order_slip', 'cart', 'abandoned_carts',
         'wishlist', 'stock_mvt',
         'product_comments',
         'configuration',
@@ -84,6 +84,8 @@ class MigrationManager
         'order_payment'      => 'orders',
         'order_slip'         => 'orders',
         'cart'               => 'orders',
+        // Runs with the orders; its own switch (scope[abandoned_carts]) can turn it off
+        'abandoned_carts'    => 'orders',
         'wishlist'           => 'customers',
         'stock_mvt'          => 'catalog',
         'product_comments'   => 'reviews',
@@ -709,6 +711,7 @@ class MigrationManager
                 break;
 
             // 20d. Carts
+            // The carts the orders were placed from; those that never became an order follow in abandoned_carts
             case 'cart':
                 $step = new Steps\CartMigrationStep($conn, $prefix);
                 $result = $step->process($offset, $limit, $lastDate);
@@ -718,6 +721,31 @@ class MigrationManager
                 }
                 if ($result['finished']) {
                     $this->updateSyncHistory('cart', date('Y-m-d H:i:s'));
+                    $state['current_task'] = 'abandoned_carts';
+                    $state['offset'] = 0;
+                } else {
+                    $state['offset'] += $limit;
+                }
+                break;
+
+            // On by default, as before the switch existed: a configuration without it keeps them
+            case 'abandoned_carts':
+                $skipped = isset($scope['abandoned_carts']) && empty($scope['abandoned_carts']);
+                if ($skipped) {
+                    $result = ['count' => 0, 'finished' => true];
+                } else {
+                    $step = new Steps\CartMigrationStep($conn, $prefix, true);
+                    $result = $step->process($offset, $limit, $lastDate);
+                }
+                $message = sprintf($this->l('Migrating abandoned carts (Offset: %d)...'), $offset);
+                if ($result['count'] == 0 && $offset > 0) {
+                    $result['finished'] = true;
+                }
+                if ($result['finished']) {
+                    // Skipped carts were not read: a later incremental run with the switch on must read them all
+                    if (!$skipped) {
+                        $this->updateSyncHistory('abandoned_carts', date('Y-m-d H:i:s'));
+                    }
                     $state['current_task'] = 'wishlist';
                     $state['offset'] = 0;
                     $message = $this->l('Carts done. Starting wishlists...');
@@ -852,6 +880,7 @@ class MigrationManager
             'order_payment' => 3,
             'order_slip' => 2,
             'cart' => 3,
+            'abandoned_carts' => 3,
             'wishlist' => 2,
             'stock_mvt' => 3,
             'product_comments' => 3,

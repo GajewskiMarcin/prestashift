@@ -292,7 +292,8 @@ var PrestaShift = {
         if (step === 2 && PrestaShift.scopeData) {
             $.each(PrestaShift.scopeData, function (i, field) {
                 var $el = $('[name="' + field.name + '"]');
-                if ($el.is(':checkbox')) $el.prop('checked', true);
+                // A switch with a hidden "0" next to it comes back as that 0 when it was unticked
+                if ($el.is(':checkbox')) $el.filter(':checkbox').prop('checked', field.value == '1');
                 else $el.val(field.value);
             });
         }
@@ -562,6 +563,16 @@ var PrestaShift = {
             $messages.prop('disabled', false);
             $orders.closest('.ps-checkbox-wrapper').css('opacity', '1');
             $messages.closest('.ps-checkbox-wrapper').css('opacity', '1');
+        }
+
+        // Abandoned carts are part of the orders: no orders, no abandoned carts
+        var $abandoned = $form.find('input[type="checkbox"][name="scope[abandoned_carts]"]');
+        if (!$orders.is(':checked')) {
+            $abandoned.prop('checked', false).prop('disabled', true);
+            $abandoned.closest('.ps-checkbox-wrapper').css('opacity', '0.5');
+        } else {
+            $abandoned.prop('disabled', false);
+            $abandoned.closest('.ps-checkbox-wrapper').css('opacity', '1');
         }
     },
 
