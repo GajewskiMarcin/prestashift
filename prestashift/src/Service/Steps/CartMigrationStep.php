@@ -23,10 +23,14 @@ class CartMigrationStep
     /** @var array table => [key => rows] — rows of the batch, one query per table */
     private $rows = [];
 
-    public function __construct($db_connection, $prefix)
+    /** @var bool carts that never became an order instead of the carts of the orders */
+    private $abandoned;
+
+    public function __construct($db_connection, $prefix, $abandoned = false)
     {
         $this->db_connection = $db_connection;
         $this->prefix = $prefix;
+        $this->abandoned = (bool)$abandoned;
     }
 
     public function process($offset, $limit, $dateFilter = null)
@@ -53,11 +57,12 @@ class CartMigrationStep
 
     private function getCartsFromSource($offset, $limit, $dateFilter = null)
     {
-        $where = "";
+        // A cart is abandoned when no order was placed from it
+        $where = " WHERE " . ($this->abandoned ? 'NOT ' : '') . "EXISTS (SELECT 1 FROM `{$this->prefix}orders` o WHERE o.`id_cart` = c.`id_cart`)";
         if ($dateFilter) {
-            $where = " WHERE `date_add` > '{$dateFilter}' OR `date_upd` > '{$dateFilter}' ";
+            $where .= " AND (c.`date_add` > '{$dateFilter}' OR c.`date_upd` > '{$dateFilter}') ";
         }
-        $sql = "SELECT * FROM `{$this->prefix}cart` {$where} ORDER BY `id_cart` ASC LIMIT $limit OFFSET $offset";
+        $sql = "SELECT c.* FROM `{$this->prefix}cart` c {$where} ORDER BY c.`id_cart` ASC LIMIT $limit OFFSET $offset";
         $stmt = $this->db_connection->query($sql);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }

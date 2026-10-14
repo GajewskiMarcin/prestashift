@@ -87,6 +87,15 @@
                         </div>
                     </label>
                     <label class="ps-checkbox-wrapper">
+                        {* Sent as 0 when unticked: without the field abandoned carts are migrated, as before the switch existed *}
+                        <input type="hidden" name="scope[abandoned_carts]" value="0">
+                        <input type="checkbox" name="scope[abandoned_carts]" value="1" checked class="ps-checkbox-input" data-requires="orders">
+                        <div>
+                            <span class="ps-font-medium ps-text-slate-900">{l s='Abandoned Carts' mod='prestashift'}</span>
+                            <p class="ps-text-xs ps-text-slate-500">{l s='Carts that never became an order. Untick on shops with thousands of them.' mod='prestashift'}</p>
+                        </div>
+                    </label>
+                    <label class="ps-checkbox-wrapper">
                         <input type="checkbox" name="scope[messages]" value="1" checked class="ps-checkbox-input" data-requires="customers">
                         <span class="ps-font-medium ps-text-slate-900">{l s='Customer Messages' mod='prestashift'}</span>
                     </label>

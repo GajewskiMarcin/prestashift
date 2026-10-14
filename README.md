@@ -30,7 +30,7 @@ Professional data migration tool for PrestaShop. Migrate your shop data between 
 | **Pricing** | Specific Prices, Catalog Price Rules |
 | **Media** | Product Images (with thumbnails), Attachments, Manufacturer logos |
 | **Customers** | Customers, Groups, Addresses, Wishlists |
-| **Orders** | Orders, Order Details, History, Payments, Invoices, Credit Slips, Carts |
+| **Orders** | Orders, Order Details, History, Payments, Invoices, Credit Slips, Carts (abandoned carts: own switch, on by default) |
 | **Brands** | Manufacturers, Suppliers, Product-Supplier links |
 | **Shipping** | Carriers, Ranges, Delivery zones, Fees |
 | **Content** | CMS Pages & Categories, Meta/SEO, Contacts, Physical Stores |
