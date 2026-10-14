@@ -5,7 +5,7 @@
  * @author    marcingajewski.pl <kontakt@marcingajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.2.0
+ * @version   1.3.0
  */
 
 // Prevent PrestaShop from redirecting based on domain mismatch
@@ -123,7 +123,7 @@ try {
         header('Content-Type: application/json');
         echo json_encode(array(
             'success' => true,
-            'version' => '1.2.0',
+            'version' => '1.3.0',
             'ps_version' => _PS_VERSION_,
             // thirtybees reports itself as PrestaShop 1.6.1.999
             'tb_version' => defined('_TB_VERSION_') ? _TB_VERSION_ : '',
