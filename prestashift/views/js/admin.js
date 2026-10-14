@@ -380,23 +380,33 @@ var PrestaShift = {
         $.each(sourceZones, function (i, source) {
             html += '<div class="ps-flex-between ps-p-3 ps-border ps-border-slate-200 ps-rounded-md ps-bg-slate-50">';
 
+            var sourceId = parseInt(source.id_zone, 10);
             html += '<div class="ps-flex-start ps-gap-2" style="flex: 1;">';
-            html += '<span class="ps-font-medium ps-text-slate-700">' + source.name + '</span>';
-            html += '<span class="ps-text-xs ps-text-slate-400">(ID: ' + source.id_zone + ')</span>';
+            html += '<span class="ps-font-medium ps-text-slate-700">' + PrestaShift.escapeHtml(source.name) + '</span>';
+            html += '<span class="ps-text-xs ps-text-slate-400">(ID: ' + sourceId + ')</span>';
             html += '</div>';
 
             html += '<div class="ps-text-slate-400" style="padding: 0 24px;"><i class="icon-long-arrow-right"></i></div>';
 
-            html += '<div style="min-width: 250px;">';
-            html += '<select name="zone_map[' + source.id_zone + ']" class="ps-input" style="height: 36px; padding: 4px 8px;">';
-            html += '<option value="">-- skip --</option>';
-            var found = false;
+            // A zone this shop does not have is created, unless the merchant
+            // picks another one or skips it
+            var match = 'new';
             $.each(localZones, function (j, local) {
-                var selected = "";
-                if (!found && local.name.toLowerCase().trim() == source.name.toLowerCase().trim()) {
-                    selected = "selected"; found = true;
+                if (PrestaShift.sameName(local.name, source.name)) {
+                    match = String(parseInt(local.id_zone, 10));
+                    return false;
                 }
-                html += '<option value="' + local.id_zone + '" ' + selected + '>' + local.name + '</option>';
+            });
+            var countries = parseInt(source.countries, 10) || 0;
+            var createLabel = countries > 0 ? PrestaShift.t('zone_create_countries').replace('%d', countries) : PrestaShift.t('map_create');
+
+            html += '<div style="min-width: 250px;">';
+            html += '<select name="zone_map[' + sourceId + ']" class="ps-input" style="height: 36px; padding: 4px 8px;">';
+            html += '<option value="">-- skip --</option>';
+            html += '<option value="new"' + (match === 'new' ? ' selected' : '') + '>+ ' + createLabel + '</option>';
+            $.each(localZones, function (j, local) {
+                var localId = String(parseInt(local.id_zone, 10));
+                html += '<option value="' + localId + '"' + (localId === match ? ' selected' : '') + '>' + PrestaShift.escapeHtml(local.name) + '</option>';
             });
             html += '</select></div></div>';
         });
@@ -602,10 +612,13 @@ var PrestaShift = {
         $.each(sourceConfigs, function (i, source) {
             html += '<div class="ps-flex-between ps-p-3 ps-border ps-border-slate-200 ps-rounded-md ps-bg-slate-50">';
 
+            var sourceId = parseInt(source.id_order_state, 10);
+            var match = PrestaShift.matchStatus(source, localStatuses);
+
             // Name Column: flex: 1 to push arrow/select to the right
             html += '<div class="ps-flex-start ps-gap-2" style="flex: 1;">';
-            html += '<span class="ps-font-medium ps-text-slate-700">' + source.name + '</span>';
-            html += '<span class="ps-text-xs ps-text-slate-400">(' + source.id_order_state + ')</span>';
+            html += '<span class="ps-font-medium ps-text-slate-700">' + PrestaShift.escapeHtml(source.name) + '</span>';
+            html += '<span class="ps-text-xs ps-text-slate-400">(' + sourceId + ')</span>';
             html += '</div>';
 
             // Arrow: Padding to avoid sticking
@@ -613,19 +626,66 @@ var PrestaShift = {
 
             // Select: Fixed min-width
             html += '<div style="min-width: 250px;">';
-            html += '<select name="status_map[' + source.id_order_state + ']" class="ps-input" style="height: 36px; padding: 4px 8px;">';
-            var found = false;
+            html += '<select name="status_map[' + sourceId + ']" class="ps-input" style="height: 36px; padding: 4px 8px;">';
+            html += '<option value="new"' + (match === 'new' ? ' selected' : '') + '>+ ' + PrestaShift.t('map_create') + '</option>';
             $.each(localStatuses, function (j, local) {
-                var selected = "";
-                if (!found && local.name.toLowerCase().trim() == source.name.toLowerCase().trim()) {
-                    selected = "selected"; found = true;
-                }
-                html += '<option value="' + local.id_order_state + '" ' + selected + '>' + local.name + '</option>';
+                var localId = String(parseInt(local.id_order_state, 10));
+                html += '<option value="' + localId + '"' + (localId === match ? ' selected' : '') + '>' + PrestaShift.escapeHtml(local.name) + '</option>';
             });
             html += '</select></div></div>';
         });
         html += '</div>';
         $('#status-mapping-table-container').html(html);
+    },
+
+    // The target status with one of the names of the source status (in any
+    // language), else the same built-in status — names differ between two
+    // shops in different languages, and between versions of PrestaShop:
+    // same id, meaning (flags) and e-mail template, or, for a built-in status
+    // that moved to another id, the only status here with that meaning and
+    // template. Nothing found: 'new', the status is created as it was.
+    matchStatus: function (source, localStatuses) {
+        var match = 'new';
+        $.each(localStatuses, function (j, local) {
+            if (local.deleted && !source.deleted) return;
+            $.each(source.names || [], function (k, name) {
+                $.each(local.names || [], function (l, localName) {
+                    if (PrestaShift.sameName(name, localName)) {
+                        match = String(parseInt(local.id_order_state, 10));
+                        return false;
+                    }
+                });
+                if (match !== 'new') return false;
+            });
+            if (match !== 'new') return false;
+        });
+        if (match !== 'new') return match;
+
+        // A status with no flags and no template says nothing about itself:
+        // the same id alone would pair two unrelated statuses
+        var meaningful = source.template !== '' || source.flags !== '0000';
+        $.each(localStatuses, function (j, local) {
+            if (meaningful && !local.deleted && parseInt(local.id_order_state, 10) === parseInt(source.id_order_state, 10)
+                && local.flags === source.flags && local.template === source.template) {
+                match = String(parseInt(local.id_order_state, 10));
+                return false;
+            }
+        });
+        if (match !== 'new' || !source.system || source.template === '') return match;
+
+        var sameMeaning = $.grep(localStatuses, function (local) {
+            return !local.deleted && local.system && local.flags === source.flags && local.template === source.template;
+        });
+        if (sameMeaning.length === 1) {
+            match = String(parseInt(sameMeaning[0].id_order_state, 10));
+        }
+
+        return match;
+    },
+
+    sameName: function (a, b) {
+        var left = String(a == null ? '' : a).toLowerCase().trim();
+        return left !== '' && left === String(b == null ? '' : b).toLowerCase().trim();
     },
 
     startMigration: function () {
@@ -703,6 +763,11 @@ var PrestaShift = {
                         $('#main-progress-bar').css('width', response.progress + '%');
                         $('#main-progress-text').text(response.progress + '%');
                     }
+
+                    // Order statuses and zones created when the migration started
+                    $.each(response.created || [], function (i, line) {
+                        PrestaShift.log(line);
+                    });
                     if (response.next_batch) {
                         var nextPayload = { ajax: true, action: 'run_batch', state: JSON.stringify(response.state) };
 

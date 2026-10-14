@@ -42,6 +42,8 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                 'st_old_status' => $this->module->l('Old Status (Source)', 'AdminPrestaShiftMigrationController'),
                 'st_new_status' => $this->module->l('New Status (Target)', 'AdminPrestaShiftMigrationController'),
                 'st_error_fetch' => $this->module->l('Error while fetching statuses from source.', 'AdminPrestaShiftMigrationController'),
+                'map_create' => $this->module->l('Create it as in the old shop', 'AdminPrestaShiftMigrationController'),
+                'zone_create_countries' => $this->module->l('Create it as in the old shop (countries in it: %d)', 'AdminPrestaShiftMigrationController'),
                 'loading_statuses' => $this->module->l('Loading source statuses...', 'AdminPrestaShiftMigrationController'),
                 'none_selected' => $this->module->l('None selected', 'AdminPrestaShiftMigrationController'),
                 'yes_clean' => $this->module->l('Yes (Clean Install)', 'AdminPrestaShiftMigrationController'),
@@ -512,6 +514,12 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                 $config['source_url']
             );
 
+            // Order statuses and zones the mapping step marked "Create it as in
+            // the old shop". Before anything is deleted: one that cannot be
+            // created stops the migration while the target is untouched.
+            $mappingCreator = new \PrestaShift\Service\MappingCreator($sourceConn, $config['db_prefix']);
+            $created = $mappingCreator->apply($config);
+
             // 3. Cleanup if requested. Emptied tables also lose their map
             // entries, so their offsets restart at 0 and ids come out 1:1.
             if (!empty($config['options']['clean_target'])) {
@@ -531,7 +539,8 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                 'success' => true,
                 'message' => $this->module->l('Initialization complete. Target wiped (if selected). Starting batch...', 'AdminPrestaShiftMigrationController'),
                 'next_batch' => true,
-                'state' => $state
+                'state' => $state,
+                'created' => $this->describeCreated($created)
             ];
 
         } catch (Throwable $e) {
@@ -836,32 +845,27 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $conn = $manager->getConnection($config);
             $prefix = $config['db_prefix'];
 
-            // 1. Get ALL languages from source to find a valid one for names
-            $langSql = "SELECT id_lang FROM `{$prefix}lang` WHERE active = 1 LIMIT 1";
-            $langStmt = $conn->query($langSql);
-            $sourceLangId = $langStmt->fetchColumn() ?: 1;
+            // Names in every language, so that a status is recognised whatever
+            // language the two shops have in common
+            $sourceStatuses = $conn->query("SELECT * FROM `{$prefix}order_state` ORDER BY id_order_state ASC")->fetchAll(PDO::FETCH_ASSOC);
+            $sourceNames = $conn->query("SELECT osl.id_order_state, osl.name, osl.template, l.iso_code
+                FROM `{$prefix}order_state_lang` osl
+                JOIN `{$prefix}lang` l ON l.id_lang = osl.id_lang")->fetchAll(PDO::FETCH_ASSOC);
+            $sourceDefaultIso = (string)$conn->query("SELECT l.iso_code
+                FROM `{$prefix}configuration` c
+                JOIN `{$prefix}lang` l ON l.id_lang = c.value
+                WHERE c.name = 'PS_LANG_DEFAULT' LIMIT 1")->fetchColumn();
 
-            // 2. Get Source Statuses
-            $sql = "SELECT os.id_order_state, osl.name 
-                    FROM `{$prefix}order_state` os 
-                    LEFT JOIN `{$prefix}order_state_lang` osl ON (os.id_order_state = osl.id_order_state AND osl.id_lang = $sourceLangId)
-                    ORDER BY os.id_order_state ASC";
-            $stmt = $conn->query($sql);
-            $sourceStatuses = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            // 3. Get Local Statuses (Destination)
-            $localLangId = (int)$this->context->language->id;
-            $localStatuses = \Db::getInstance()->executeS("
-                SELECT os.id_order_state, osl.name 
-                FROM `"._DB_PREFIX_."order_state` os
-                LEFT JOIN `"._DB_PREFIX_."order_state_lang` osl ON (os.id_order_state = osl.id_order_state AND osl.id_lang = $localLangId)
-                ORDER BY os.id_order_state ASC
-            ");
+            $localStatuses = \Db::getInstance()->executeS("SELECT * FROM `"._DB_PREFIX_."order_state` ORDER BY id_order_state ASC");
+            $localNames = \Db::getInstance()->executeS("SELECT osl.id_order_state, osl.name, osl.template, l.iso_code
+                FROM `"._DB_PREFIX_."order_state_lang` osl
+                JOIN `"._DB_PREFIX_."lang` l ON l.id_lang = osl.id_lang");
+            $localIso = strtolower((string)$this->context->language->iso_code);
 
             $response = [
                 'success' => true,
-                'source_statuses' => $sourceStatuses,
-                'local_statuses' => $localStatuses
+                'source_statuses' => $this->describeOrderStates($sourceStatuses, $sourceNames, [$localIso, strtolower($sourceDefaultIso)]),
+                'local_statuses' => $this->describeOrderStates((array)$localStatuses, (array)$localNames, [$localIso])
             ];
 
         } catch (\Throwable $e) {
@@ -902,8 +906,11 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $prefix = $config['db_prefix'];
 
             // Source zones
+            // With how many countries each has: a zone created as in the old
+            // shop takes those countries with it
             $sourceZones = $conn->query(
-                "SELECT id_zone, name FROM `{$prefix}zone` WHERE active = 1 ORDER BY name ASC"
+                "SELECT z.id_zone, z.name, (SELECT COUNT(*) FROM `{$prefix}country` c WHERE c.id_zone = z.id_zone) AS countries
+                FROM `{$prefix}zone` z WHERE z.active = 1 ORDER BY z.name ASC"
             )->fetchAll(\PDO::FETCH_ASSOC);
 
             // Target zones
@@ -928,5 +935,84 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         ob_end_clean();
         header('Content-Type: application/json');
         die($json);
+    }
+
+    /**
+     * Order statuses for the mapping step: the name to show, the names in every
+     * language and what the status does (flags, e-mail template) — the same id
+     * holds a different status in another shop unless those match too.
+     */
+    private function describeOrderStates(array $statuses, array $names, array $isoPreference)
+    {
+        $namesByStatus = [];
+        foreach ($names as $row) {
+            $namesByStatus[(int)$row['id_order_state']][strtolower((string)$row['iso_code'])] = $row;
+        }
+
+        $described = [];
+        foreach ($statuses as $status) {
+            $id = (int)$status['id_order_state'];
+            $langs = isset($namesByStatus[$id]) ? $namesByStatus[$id] : [];
+            $shown = reset($langs);
+            foreach ($isoPreference as $iso) {
+                if (isset($langs[$iso])) {
+                    $shown = $langs[$iso];
+                    break;
+                }
+            }
+
+            // What the status means; invoice and e-mail are settings a
+            // merchant changes, they do not make it another status
+            $flags = '';
+            foreach (['paid', 'shipped', 'delivery', 'logable'] as $flag) {
+                $flags .= empty($status[$flag]) ? '0' : '1';
+            }
+
+            $allNames = [];
+            foreach ($langs as $lang) {
+                $allNames[] = (string)$lang['name'];
+            }
+
+            $described[] = [
+                'id_order_state' => $id,
+                'name' => $shown ? (string)$shown['name'] : '',
+                'names' => array_values(array_unique($allNames)),
+                'template' => $shown ? (string)$shown['template'] : '',
+                'flags' => $flags,
+                'deleted' => !empty($status['deleted']),
+                'system' => !empty($status['unremovable']),
+            ];
+        }
+
+        return $described;
+    }
+
+    /**
+     * One line per order status and zone created (or found) when the migration
+     * started, for the migration log. HTML like every message of the log: l()
+     * escapes the sentence, names from the source are escaped here.
+     */
+    private function describeCreated(array $created)
+    {
+        $lines = [];
+        foreach ($created['order_states'] as $status) {
+            $name = htmlspecialchars($status['name'], ENT_QUOTES, 'UTF-8');
+            if ($status['reused']) {
+                $lines[] = sprintf($this->module->l('Order status "%1$s" already exists in this shop (ID %2$d): it is used.', 'AdminPrestaShiftMigrationController'), $name, $status['id']);
+                continue;
+            }
+            $lines[] = sprintf($this->module->l('Order status "%1$s" created as in the old shop (ID %2$d).', 'AdminPrestaShiftMigrationController'), $name, $status['id']);
+            if ($status['mail_off']) {
+                $lines[] = sprintf($this->module->l('Order status "%1$s" sends no e-mail for now: its template "%2$s" is not in this shop. Copy it from the mails folder of the old shop, then turn the e-mail on in Orders > Statuses.', 'AdminPrestaShiftMigrationController'), $name, htmlspecialchars($status['template'], ENT_QUOTES, 'UTF-8'));
+            }
+        }
+        foreach ($created['zones'] as $zone) {
+            $message = $zone['reused']
+                ? $this->module->l('Zone "%1$s" already exists in this shop (ID %2$d). Moved to it as in the old shop — countries: %3$d, states: %4$d.', 'AdminPrestaShiftMigrationController')
+                : $this->module->l('Zone "%1$s" created as in the old shop (ID %2$d). Moved to it — countries: %3$d, states: %4$d.', 'AdminPrestaShiftMigrationController');
+            $lines[] = sprintf($message, htmlspecialchars($zone['name'], ENT_QUOTES, 'UTF-8'), $zone['id'], $zone['countries'], $zone['states']);
+        }
+
+        return $lines;
     }
 }
