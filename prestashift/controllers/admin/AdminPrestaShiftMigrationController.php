@@ -246,6 +246,10 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             if (!$test['success']) {
                 throw new \Exception("Connection test failed: " . ($test['error'] ?? 'Unknown error'));
             }
+
+            // A wrong prefix connects all the same and fails only at the last
+            // step, when the data is counted
+            $this->checkSourcePrefix($conn, (string)$config['db_prefix'], isset($test['prefix']) ? (string)$test['prefix'] : null);
             $prefix = $test['prefix'] ?? $config['db_prefix'];
             $sourceVersion = $test['ps_version'] ?? 'unknown';
             $targetVersion = _PS_VERSION_;
@@ -270,7 +274,61 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         header('Content-Type: application/json');
         die($json);
     }
-    
+
+    /**
+     * The prefix of the form must be the one of the source tables. The
+     * connector reports its own; over Direct DB the tables that end in
+     * "configuration" tell which prefixes the database holds.
+     */
+    private function checkSourcePrefix($conn, $prefix, $connectorPrefix)
+    {
+        // It goes into every query of the migration
+        if (!preg_match('/^[A-Za-z0-9_]*$/', $prefix)) {
+            throw new \Exception($this->module->l('The table prefix may only contain letters, digits and underscores.', 'AdminPrestaShiftMigrationController'));
+        }
+
+        if ($connectorPrefix !== null && $connectorPrefix !== $prefix) {
+            throw new \Exception(sprintf(
+                $this->module->l('The source shop uses the table prefix "%1$s", not "%2$s". Correct the prefix and test again.', 'AdminPrestaShiftMigrationController'),
+                preg_replace('/[^A-Za-z0-9_]/', '', $connectorPrefix),
+                $prefix
+            ));
+        }
+
+        try {
+            $settings = (int)$conn->query("SELECT COUNT(*) FROM `{$prefix}configuration` WHERE `name` = 'PS_LANG_DEFAULT'")->fetchColumn();
+        } catch (\Throwable $e) {
+            $settings = 0; // no such table
+        }
+        if ($settings > 0) {
+            return;
+        }
+
+        $found = [];
+        try {
+            foreach ($conn->query("SHOW TABLES LIKE '%configuration'")->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+                $candidate = substr((string)reset($row), 0, -strlen('configuration'));
+                if ($candidate !== '' && $candidate !== $prefix && preg_match('/^[A-Za-z0-9_]+$/', $candidate)) {
+                    $found[] = $candidate;
+                }
+            }
+        } catch (\Throwable $e) {
+            $found = [];
+        }
+
+        if (!empty($found)) {
+            throw new \Exception(sprintf(
+                $this->module->l('The source database has no PrestaShop tables with the prefix "%1$s". Prefixes found there: %2$s. Correct the prefix and test again.', 'AdminPrestaShiftMigrationController'),
+                $prefix,
+                implode(', ', array_slice($found, 0, 5))
+            ));
+        }
+        throw new \Exception(sprintf(
+            $this->module->l('The source database has no PrestaShop tables with the prefix "%s". Check the prefix and the database name.', 'AdminPrestaShiftMigrationController'),
+            $prefix
+        ));
+    }
+
     /**
      * Generate warnings based on source/target version difference
      */
