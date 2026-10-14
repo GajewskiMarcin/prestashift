@@ -28,9 +28,9 @@ class PsConnector extends Module
         $this->displayName = $this->l('PrestaShift Connector');
         $this->description = $this->l('Secure API endpoint for PrestaShift migration tool.');
 
-        // The connector sits on the old shop: PrestaShop 1.6 and thirtybees
-        // (which reports itself as 1.6.1.999) included
-        $this->ps_versions_compliancy = array('min' => '1.6', 'max' => _PS_VERSION_);
+        // The connector sits on the old shop: PrestaShop 1.5.6, 1.6 and
+        // thirtybees (which reports itself as 1.6.1.999) included
+        $this->ps_versions_compliancy = array('min' => '1.5', 'max' => _PS_VERSION_);
         $this->confirmUninstall = $this->l('Are you sure you want to uninstall? This will break any active migrations.');
     }
 
@@ -84,13 +84,13 @@ class PsConnector extends Module
         $baseUrl = (Configuration::get('PS_SSL_ENABLED') ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'];
         $apiUrl = $baseUrl . __PS_BASE_URI__ . 'modules/' . $this->name . '/api.php';
 
-        $this->context->smarty->assign([
+        $this->context->smarty->assign(array(
             'connector_token' => Configuration::get('PS_CONNECTOR_TOKEN'),
             'api_url' => $apiUrl,
             'currentIndex' => AdminController::$currentIndex . '&configure=' . $this->name,
             'token' => Tools::getAdminTokenLite('AdminModules'),
             'module_version' => $this->version,
-        ]);
+        ));
 
         return $this->display(__FILE__, 'views/templates/admin/configure.tpl');
     }

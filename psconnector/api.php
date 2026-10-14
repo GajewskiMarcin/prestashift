@@ -21,11 +21,32 @@ ob_end_clean();
 header_remove('Location');
 
 // The source shop is the old one: this file has to run on the PHP versions
-// PrestaShop 1.6 shops are still hosted on (5.6 and up), hence no "??".
+// PrestaShop 1.5 and 1.6 shops are still hosted on (5.3 and up), hence no
+// "??", no [] arrays, and the fallbacks below.
 function psconnector_post($key, $default = '')
 {
-    // Strings only: "token[]=x" must not reach hash_equals() or base64_decode()
+    // Strings only: "token[]=x" must not reach the token check or base64_decode()
     return isset($_POST[$key]) && is_string($_POST[$key]) ? $_POST[$key] : $default;
+}
+
+/**
+ * Token check in constant time, so that the answer time does not tell how
+ * much of a guessed token was right. hash_equals() exists from PHP 5.6.
+ */
+function psconnector_equals($known, $given)
+{
+    if (function_exists('hash_equals')) {
+        return hash_equals($known, $given);
+    }
+    if (strlen($known) !== strlen($given)) {
+        return false;
+    }
+    $difference = 0;
+    for ($i = 0, $length = strlen($known); $i < $length; $i++) {
+        $difference |= ord($known[$i]) ^ ord($given[$i]);
+    }
+
+    return $difference === 0;
 }
 
 /**
@@ -86,10 +107,10 @@ function psconnector_is_read_only($sql, $backslashEscapes = true)
 $storedToken = Configuration::get('PS_CONNECTOR_TOKEN');
 $receivedToken = isset($_SERVER['HTTP_X_PS_CONNECTOR_TOKEN']) ? $_SERVER['HTTP_X_PS_CONNECTOR_TOKEN'] : psconnector_post('token');
 
-if (empty($storedToken) || empty($receivedToken) || !hash_equals((string)$storedToken, (string)$receivedToken)) {
+if (empty($storedToken) || empty($receivedToken) || !psconnector_equals((string)$storedToken, (string)$receivedToken)) {
     header('HTTP/1.1 403 Forbidden');
     header('Content-Type: application/json');
-    echo json_encode(['success' => false, 'error' => 'Unauthorized access.']);
+    echo json_encode(array('success' => false, 'error' => 'Unauthorized access.'));
     exit;
 }
 
@@ -100,7 +121,7 @@ try {
     // === TEST — connection check + version info ===
     if ($action === 'test') {
         header('Content-Type: application/json');
-        echo json_encode([
+        echo json_encode(array(
             'success' => true,
             'version' => '1.2.0',
             'ps_version' => _PS_VERSION_,
@@ -109,7 +130,7 @@ try {
             'php_version' => PHP_VERSION,
             'prefix' => _DB_PREFIX_,
             'shop_name' => Configuration::get('PS_SHOP_NAME'),
-        ]);
+        ));
         exit;
     }
 
@@ -154,15 +175,16 @@ try {
 
         $json = json_encode($results);
         if ($json === false) {
-            throw new Exception("Rows could not be encoded: " . json_last_error_msg());
+            // json_last_error_msg() exists from PHP 5.5
+            throw new Exception("Rows could not be encoded: " . (function_exists('json_last_error_msg') ? json_last_error_msg() : 'JSON error ' . json_last_error()));
         }
 
         header('Content-Type: application/json');
-        echo json_encode([
+        echo json_encode(array(
             'success' => true,
             'encoding' => 'base64',
             'data_b64' => base64_encode($json),
-        ]);
+        ));
         exit;
     }
 
@@ -179,7 +201,7 @@ try {
         $path = ltrim($path, '/\\');                     // leading slashes
 
         // Only allow specific directories
-        $allowedPrefixes = ['img/', 'download/', 'upload/'];
+        $allowedPrefixes = array('img/', 'download/', 'upload/');
         $allowed = false;
         foreach ($allowedPrefixes as $prefix) {
             if (strpos($path, $prefix) === 0) {
@@ -228,7 +250,7 @@ try {
         $count = (int)Db::getInstance()->getValue("SELECT COUNT(*) FROM `" . pSQL($fullTable) . "`");
 
         header('Content-Type: application/json');
-        echo json_encode(['success' => true, 'count' => $count]);
+        echo json_encode(array('success' => true, 'count' => $count));
         exit;
     }
 
@@ -238,6 +260,6 @@ try {
 } catch (Exception $e) {
     header('HTTP/1.1 500 Internal Server Error');
     header('Content-Type: application/json');
-    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    echo json_encode(array('success' => false, 'error' => $e->getMessage()));
     exit;
 }
