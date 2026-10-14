@@ -25,7 +25,7 @@ class ImageTransferService
      * Downloads a product image from the source (stored under its source id)
      * and saves it under its target id, with thumbnails.
      */
-    public function downloadAndSave($sourceUrl, $sourceImageId, $targetImageId)
+    public function downloadAndSave($sourceUrl, $sourceImageId, $targetImageId, $sourceProductId = 0)
     {
         $sourceFolder = implode('/', str_split((string)(int)$sourceImageId));
         $targetFolder = implode('/', str_split((string)(int)$targetImageId));
@@ -35,10 +35,12 @@ class ImageTransferService
             return false;
         }
 
-        if ($this->bridgeClient) {
-            $content = $this->bridgeClient->getFile("img/p/$sourceFolder/$sourceImageId.jpg");
-        } else {
-            $content = Tools::file_get_contents(rtrim($sourceUrl, '/') . "/img/p/$sourceFolder/$sourceImageId.jpg");
+        $content = $this->fetch($sourceUrl, "img/p/$sourceFolder/$sourceImageId.jpg");
+
+        // Shops that started on PrestaShop 1.4 or older may still keep their
+        // images flat, as <product>-<image>.jpg ("legacy images" setting)
+        if (!$content && (int)$sourceProductId > 0) {
+            $content = $this->fetch($sourceUrl, 'img/p/' . (int)$sourceProductId . '-' . (int)$sourceImageId . '.jpg');
         }
 
         if (!$content) {
@@ -61,5 +63,14 @@ class ImageTransferService
         }
 
         return true;
+    }
+
+    private function fetch($sourceUrl, $path)
+    {
+        if ($this->bridgeClient) {
+            return $this->bridgeClient->getFile($path);
+        }
+
+        return Tools::file_get_contents(rtrim($sourceUrl, '/') . '/' . $path);
     }
 }

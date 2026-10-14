@@ -49,6 +49,7 @@ class DirectDbClient
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
             $psVersion = null;
+            $tbVersion = '';
             try {
                 $stmt2 = $this->pdo->query(
                     "SELECT value FROM {$this->prefix}configuration WHERE name = 'PS_VERSION_DB' LIMIT 1"
@@ -57,6 +58,17 @@ class DirectDbClient
                 if ($row2) {
                     $psVersion = $row2['value'];
                 }
+
+                // thirtybees keeps its own version there: its "1.7.0" is not
+                // PrestaShop 1.7. For the data it is a PrestaShop 1.6.1, the
+                // version it reports to modules.
+                $stmt3 = $this->pdo->query(
+                    "SELECT COUNT(*) FROM {$this->prefix}configuration WHERE name LIKE 'TB\\_PAGE\\_CACHE\\_%'"
+                );
+                if ((int)$stmt3->fetchColumn() > 0) {
+                    $tbVersion = (string)$psVersion;
+                    $psVersion = '1.6.1.999';
+                }
             } catch (Exception $e) {
                 // table may not exist — ignore
             }
@@ -64,6 +76,7 @@ class DirectDbClient
             return [
                 'success'    => true,
                 'ps_version' => $psVersion,
+                'tb_version' => $tbVersion,
                 'prefix'     => $this->prefix,
             ];
         } catch (Exception $e) {

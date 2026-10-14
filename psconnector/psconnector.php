@@ -5,7 +5,7 @@
  * @author    marcingajewski.pl <kontakt@marcingajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.2.0
+ * @version   1.3.0
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -18,7 +18,7 @@ class PsConnector extends Module
     {
         $this->name = 'psconnector';
         $this->tab = 'administration';
-        $this->version = '1.2.0';
+        $this->version = '1.3.0';
         $this->author = 'marcingajewski.pl';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -28,7 +28,9 @@ class PsConnector extends Module
         $this->displayName = $this->l('PrestaShift Connector');
         $this->description = $this->l('Secure API endpoint for PrestaShift migration tool.');
 
-        $this->ps_versions_compliancy = array('min' => '1.7', 'max' => _PS_VERSION_);
+        // The connector sits on the old shop: PrestaShop 1.5.6, 1.6 and
+        // thirtybees (which reports itself as 1.6.1.999) included
+        $this->ps_versions_compliancy = array('min' => '1.5', 'max' => _PS_VERSION_);
         $this->confirmUninstall = $this->l('Are you sure you want to uninstall? This will break any active migrations.');
     }
 
@@ -82,13 +84,13 @@ class PsConnector extends Module
         $baseUrl = (Configuration::get('PS_SSL_ENABLED') ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'];
         $apiUrl = $baseUrl . __PS_BASE_URI__ . 'modules/' . $this->name . '/api.php';
 
-        $this->context->smarty->assign([
+        $this->context->smarty->assign(array(
             'connector_token' => Configuration::get('PS_CONNECTOR_TOKEN'),
             'api_url' => $apiUrl,
             'currentIndex' => AdminController::$currentIndex . '&configure=' . $this->name,
             'token' => Tools::getAdminTokenLite('AdminModules'),
             'module_version' => $this->version,
-        ]);
+        ));
 
         return $this->display(__FILE__, 'views/templates/admin/configure.tpl');
     }

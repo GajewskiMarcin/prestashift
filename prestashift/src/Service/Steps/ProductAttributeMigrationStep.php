@@ -61,15 +61,33 @@ class ProductAttributeMigrationStep
             return; // combination of a product that does not exist
         }
 
+        $row = $this->withNullableDefaultOn($row);
+        $row = SchemaHelper::blankNulls($row, ['ean13', 'isbn', 'upc', 'mpn', 'reference']);
+
         SchemaHelper::upsert('product_attribute', $row, ['id_product_attribute']);
 
-        $this->importShop($sid, $tid);
+        $this->importShop($sid, $tid, $tidProduct);
         $this->importCombination($sid, $tid);
         $this->importStock($sid, $tidProduct, $tid);
         $this->importImages($sid, $tid);
     }
 
-    private function importShop($sid, $tid)
+    /**
+     * Before PrestaShop 1.6.1 "not the default combination" was stored as 0.
+     * Later versions have a unique key on (id_product, default_on) and store
+     * NULL instead: with 0, the second combination of a product collides with
+     * the first one and overwrites it.
+     */
+    private function withNullableDefaultOn(array $row)
+    {
+        if (array_key_exists('default_on', $row) && !(int)$row['default_on']) {
+            $row['default_on'] = null;
+        }
+
+        return $row;
+    }
+
+    private function importShop($sid, $tid, $tidProduct)
     {
         $shopId = SchemaHelper::getTargetShopId();
         $shops = $this->db_connection->query("SELECT * FROM `{$this->prefix}product_attribute_shop` WHERE id_product_attribute = $sid ORDER BY id_shop ASC")->fetchAll(PDO::FETCH_ASSOC);
@@ -78,8 +96,10 @@ class ProductAttributeMigrationStep
         }
 
         // One row for the target shop (the source may be multistore)
-        $shop = IdMapper::row('product_attribute_shop', $shops[0]);
+        $shop = $this->withNullableDefaultOn(IdMapper::row('product_attribute_shop', $shops[0]));
         $shop['id_product_attribute'] = $tid;
+        // Before PrestaShop 1.6.1 this table had no id_product column
+        $shop['id_product'] = $tidProduct;
         $shop['id_shop'] = $shopId;
 
         Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "product_attribute_shop` WHERE id_product_attribute = $tid AND id_shop = $shopId");

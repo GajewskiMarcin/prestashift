@@ -1,6 +1,6 @@
 # PrestaShift — PrestaShop Migration Module
 
-Professional data migration tool for PrestaShop. Migrate your shop data between PrestaShop 1.7, 8, and 9 with ease.
+Professional data migration tool for PrestaShop. Migrate your shop data from PrestaShop 1.5.6, 1.6, 1.7, 8, 9 or thirtybees to PrestaShop 1.7, 8, and 9 with ease.
 
 ## Features
 
@@ -8,15 +8,18 @@ Professional data migration tool for PrestaShop. Migrate your shop data between 
 - **Two connection modes** — Bridge Connector (works across servers) or Direct Database (faster, same server)
 - **Version-aware** — automatic detection of source/target versions with compatibility warnings
 - **PS 1.7 → 8/9 transformations** — `redirect_type`, `id_type_redirected` auto-converted
+- **PS 1.5.6, 1.6 and thirtybees sources** — see [Migrating from PrestaShop 1.5, 1.6 or thirtybees](#migrating-from-prestashop-15-16-or-thirtybees)
+- **Nothing lost in silence** — a row the new shop refuses is reported in the migration log, with the database's reason
 - **Incremental sync** — migrate only changes since last sync
 - **Batch processing** — configurable batch sizes with pause/resume support
+- **Automatic retries** — a batch that fails is tried again every 5 seconds for about a minute before the migration stops and waits for you
 - **Image transfer** — downloads images and generates all thumbnail sizes
 - **Multistore support** — choose target shop ID
 - **Pre-flight checks** — validates PHP limits, disk space, cURL before starting
 - **Post-migration tasks** — auto rebuilds search index, category tree, clears cache
 - **Dry run preview** — see record counts before migrating
 - **File logging** — detailed logs in `var/logs/prestashift.log`
-- **Redirect map** — generates 301 redirect file for SEO preservation
+- **Old addresses kept or redirected** — the URL patterns of the old shop, `.htaccess` rules or nginx rules, with the module as fallback; see [Old addresses (URLs)](#old-addresses-urls)
 - **Status mapping** — map order statuses between source and target
 - **Interface languages** — English, Polish, French, Spanish, Portuguese, Italian, German
 - **Selective configuration** — migrates safe shop settings (name, SEO, shipping, etc.)
@@ -40,9 +43,8 @@ Professional data migration tool for PrestaShop. Migrate your shop data between 
 
 ## Requirements
 
-- **Target shop:** PrestaShop 1.7+ (where PrestaShift is installed)
-- **Source shop:** PrestaShop 1.7+ (where PSConnector is installed)
-- PHP 7.4+ with cURL extension
+- **Target shop:** PrestaShop 1.7+ (where PrestaShift is installed), PHP 7.4+ with cURL extension
+- **Source shop:** PrestaShop 1.5.6+ or thirtybees (where PSConnector is installed), PHP 5.3+
 - MySQL 5.7+ / MariaDB 10.3+
 
 ## Installation
@@ -66,7 +68,7 @@ Professional data migration tool for PrestaShop. Migrate your shop data between 
 ## Architecture
 
 ```
-Source Shop (PS 1.7/8)          Target Shop (PS 8/9)
+Source Shop (PS 1.6/1.7/8)      Target Shop (PS 8/9)
 ┌─────────────────┐            ┌──────────────────┐
 │   PSConnector    │◄──HTTP──► │   PrestaShift     │
 │   (read-only     │   Bridge  │   (migration      │
@@ -78,10 +80,71 @@ PSConnector exposes a secure, read-only API endpoint. PrestaShift connects to it
 
 Alternative: Direct Database connection (PDO) for same-server migrations — faster, no bridge needed.
 
+## Migrating from PrestaShop 1.5, 1.6 or thirtybees
+
+The old shop only needs the connector (or a database the new shop can reach). What differs between
+1.5 / 1.6 and the newer versions is converted on the way:
+
+| In the old shop | In the new shop |
+|-----------------|-----------------|
+| Columns the old version lacks (`show_condition`, `isbn`, `mpn`, `state`…) | The default of the new version |
+| Product redirect `301` / `302` / none | `301-product` / `302-product` / the shop's default redirect |
+| Unit price kept as a ratio of the price | The unit price itself (PrestaShop 8+) |
+| Store name, address and opening hours in `store` | One row per language in `store_lang`, hours as JSON |
+| Currency name and sign in `currency` | One row per language in `currency_lang` |
+| Images stored flat as `<product>-<image>.jpg` (legacy images) | The standard image folders |
+| Credit slips without totals (1.5) | Totals rebuilt from the refunded lines and the refunded shipping |
+
+thirtybees is read as what it is for the data: a PrestaShop 1.6.1. Tables that only thirtybees has
+(blog, store credit…) are not migrated.
+
+PrestaShop 1.5 was tested with 1.5.6.2, directly and through the connector on PHP 5.3, 5.4 and 5.6.
+An older 1.5 can be brought to 1.5.6.3 with PrestaShop's own upgrade first.
+
+**Passwords.** PrestaShop 1.5 and 1.6 store a password as `md5(cookie key + password)`. The new shop can
+still check it, but only with the *same* cookie key. Before the shop goes live, copy `_COOKIE_KEY_`
+from `config/settings.inc.php` of the old shop into `cookie_key` in `app/config/parameters.php` of
+the new one (this logs everybody out and invalidates existing back-office links, which does not
+matter on a shop that is not live yet). Otherwise customers and employees coming from 1.5 or 1.6 have to
+use *Forgot your password?*. Accounts of a thirtybees shop that already hold a bcrypt hash are not
+affected.
+
+**Zones.** Carrier zones are matched by name. thirtybees calls the European zone `Europe (EU)`:
+pair it with `Europe` in the zone mapping of the Options step, or its delivery prices are skipped.
+
+## Old addresses (URLs)
+
+Search engines and other sites link to the addresses of the old shop. PrestaShop 1.6, 1.7, 8, 9 and
+thirtybees do not build them the same way (a 1.6 product is `/tshirts/1-faded-t-shirt.html`, the
+same product on PrestaShop 9 `/1-faded-t-shirt.html`). The *Old addresses (URLs)* option of the
+Options step decides what happens to them:
+
+| Option | What the migration does | What you do |
+|--------|-------------------------|-------------|
+| Keep the old addresses (default) | Copies the URL patterns of the old shop (SEO & URLs) into the new one: per language on PrestaShop 9, one for all languages on 1.7 and 8 (that is how they read them) | Nothing |
+| .htaccess — 301 / 302 | Writes one rule per old address into the `.htaccess` of the shop, above `# ~~start~~` (PrestaShop keeps it when it rewrites the file), after saving a copy of the file to `var/logs/`. If the shop answers with an error afterwards, the copy is put back | Nothing on Apache / LiteSpeed |
+| nginx rules — 301 / 302 | Shows the rules at the end of the migration and keeps them as a file to download | Paste them into the `server` block, reload nginx |
+
+The old addresses are rebuilt from the database of the old shop (its patterns, or the defaults of its
+version), the new ones by PrestaShop itself. Only those that differ are kept. Both rule files can be
+downloaded from the last screen whatever the option, so they can be put on the server later.
+
+**Fallback.** While the module is enabled it redirects, by itself, any old address that still
+reaches PrestaShop (1.7.1 and later: the hook it uses does not exist in 1.7.0): a pattern the new version cannot use (thirtybees addresses have no ID), a page
+that got another ID because the target already had data, rules that the server does not apply.
+This costs one database query per page while there are old addresses to redirect. When the
+patterns were kept, or the server applies the rules, the module can be disabled.
+
+Not covered: shops whose old addresses carried keywords that cannot be rebuilt from the database
+(`{price}`, `{tags}`); an old shop with friendly URLs off (its `index.php?id_product=…` addresses
+keep working while the IDs stay the same); a new shop with friendly URLs off (nothing is mapped,
+the log says so); multistore sources.
+
 ## Security
 
 - Token-based authentication (64-char hex)
-- Connector is **read-only** — write operations blocked
+- Connector is **read-only** — it runs one single `SELECT` / `SHOW` statement per request; a second
+  statement, a comment or file access (`INTO OUTFILE`, `LOAD_FILE`) is refused
 - File access restricted to `img/`, `download/`, `upload/` directories
 - Path traversal protection with `realpath()` validation
 - Timing-safe token comparison (`hash_equals`)

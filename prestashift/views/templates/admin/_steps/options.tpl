@@ -72,6 +72,21 @@
                     <input type="number" name="options[target_shop_id]" value="1" min="1" class="ps-input" style="width: 60px !important; text-align: center;">
                 </div>
 
+                {* Old addresses (URLs) of the source shop *}
+                <div class="ps-option-row ps-space-y-2">
+                    <div>
+                        <label class="ps-font-medium ps-text-slate-900" for="opt-url-mode">{l s='Old addresses (URLs)' mod='prestashift'}</label>
+                        <p class="ps-text-sm ps-text-slate-500">{l s='How visitors and search engines reach the pages from their old address. Whatever you choose, PrestaShift itself redirects any old address the server does not handle, while the module is enabled.' mod='prestashift'}</p>
+                    </div>
+                    <select name="options[url_mode]" id="opt-url-mode" class="ps-input">
+                        <option value="match" selected>{l s='Keep the old addresses: copy the URL settings of the source shop' mod='prestashift'}</option>
+                        <option value="htaccess_301">{l s='Redirect them with .htaccess (Apache) — 301 permanent' mod='prestashift'}</option>
+                        <option value="htaccess_302">{l s='Redirect them with .htaccess (Apache) — 302 temporary' mod='prestashift'}</option>
+                        <option value="nginx_301">{l s='Redirect them with nginx rules, to copy by hand — 301 permanent' mod='prestashift'}</option>
+                        <option value="nginx_302">{l s='Redirect them with nginx rules, to copy by hand — 302 temporary' mod='prestashift'}</option>
+                    </select>
+                </div>
+
                 {* Debug Mode *}
                 <div class="ps-option-row ps-flex-between">
                      <div>

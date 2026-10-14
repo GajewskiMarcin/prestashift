@@ -76,7 +76,7 @@ class CmsMigrationStep
             }
             SchemaHelper::upsert('cms_category', $row, ['id_cms_category']);
 
-            $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}cms_category_lang` WHERE id_cms_category = $sid ORDER BY id_shop ASC")->fetchAll(PDO::FETCH_ASSOC));
+            $langs = LanguageMapper::expand($this->langRows('cms_category_lang', 'id_cms_category', $sid));
             $done = [];
             foreach ($langs as $lang) {
                 if (isset($done[(int)$lang['id_lang']])) {
@@ -104,7 +104,7 @@ class CmsMigrationStep
         SchemaHelper::upsert('cms', $row, ['id_cms']);
 
         $shopId = SchemaHelper::getTargetShopId();
-        $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}cms_lang` WHERE id_cms = $sid ORDER BY id_shop ASC")->fetchAll(PDO::FETCH_ASSOC));
+        $langs = LanguageMapper::expand($this->langRows('cms_lang', 'id_cms', $sid));
         $done = [];
         foreach ($langs as $lang) {
             if (isset($done[(int)$lang['id_lang']])) {
@@ -124,6 +124,21 @@ class CmsMigrationStep
                 $this->downloadImagesFromHtml(isset($lang['content']) ? $lang['content'] : '');
             }
         }
+    }
+
+    /**
+     * Language rows of a page or category, those of the first shop first.
+     * PrestaShop 1.5 keeps no id_shop in these tables: sorting on it in the
+     * query failed there, and stopped the whole migration.
+     */
+    private function langRows($table, $key, $id)
+    {
+        $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}$table` WHERE $key = " . (int)$id)->fetchAll(PDO::FETCH_ASSOC);
+        usort($rows, function ($a, $b) {
+            return (isset($a['id_shop']) ? (int)$a['id_shop'] : 0) - (isset($b['id_shop']) ? (int)$b['id_shop'] : 0);
+        });
+
+        return $rows;
     }
 
     /**

@@ -76,6 +76,22 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                 'post_tasks_failed' => $this->module->l('Post-migration tasks failed — please clear cache manually.', 'AdminPrestaShiftMigrationController'),
                 'error_prefix' => $this->module->l('Error: ', 'AdminPrestaShiftMigrationController'),
                 'network_error' => $this->module->l('Communication Error (Network/Timeout). Click Resume to retry this batch.', 'AdminPrestaShiftMigrationController'),
+                'retry_wait' => $this->module->l('Trying again in %1$d seconds (attempt %2$d of %3$d)...', 'AdminPrestaShiftMigrationController'),
+                'retry_gave_up' => $this->module->l('Still failing after %d attempts — migration paused. Click Resume to try again.', 'AdminPrestaShiftMigrationController'),
+                // Old addresses, last screen
+                'urls_title' => $this->module->l('Old addresses', 'AdminPrestaShiftMigrationController'),
+                'urls_none' => $this->module->l('Every old address works here as it is: there is nothing to redirect, and PrestaShift can be disabled.', 'AdminPrestaShiftMigrationController'),
+                'urls_count' => $this->module->l('%d old addresses differ in this shop.', 'AdminPrestaShiftMigrationController'),
+                'urls_match_left' => $this->module->l('They could not be kept: the page has another ID here, or this PrestaShop cannot use the URL pattern of the source. PrestaShift redirects them while it is enabled; to disable it, put the .htaccess or nginx rules below on the server.', 'AdminPrestaShiftMigrationController'),
+                'urls_ht_verified' => $this->module->l('The rules are in the .htaccess of the shop and the server applies them: PrestaShift can be disabled. Copy of the previous file: %s', 'AdminPrestaShiftMigrationController'),
+                'urls_ht_unverified' => $this->module->l('The rules are in the .htaccess of the shop (copy of the previous file: %s), but the shop could not be reached to check them. Keep PrestaShift enabled until an old address opens the new page.', 'AdminPrestaShiftMigrationController'),
+                'urls_ht_ignored' => $this->module->l('The rules are in the .htaccess of the shop (copy of the previous file: %s), but the server does not apply them — is it nginx? PrestaShift redirects the old addresses while it is enabled.', 'AdminPrestaShiftMigrationController'),
+                'urls_ht_restored' => $this->module->l('With the rules in .htaccess the shop answered with an error, so the previous file was put back. PrestaShift redirects the old addresses while it is enabled.', 'AdminPrestaShiftMigrationController'),
+                'urls_ht_failed' => $this->module->l('The .htaccess of the shop could not be changed. Download the rules and add them above the line # ~~start~~. Until then PrestaShift redirects the old addresses.', 'AdminPrestaShiftMigrationController'),
+                'urls_nginx' => $this->module->l('Paste these rules into the server block of the shop, above location /, and reload nginx. Once they work PrestaShift can be disabled; until then it redirects the old addresses itself.', 'AdminPrestaShiftMigrationController'),
+                'urls_outside' => $this->module->l('%d of them lie outside the folder of this shop: only the nginx rules can redirect them.', 'AdminPrestaShiftMigrationController'),
+                'urls_download_htaccess' => $this->module->l('Download the .htaccess rules', 'AdminPrestaShiftMigrationController'),
+                'urls_download_nginx' => $this->module->l('Download the nginx rules', 'AdminPrestaShiftMigrationController'),
                 'confirm_clear_session' => $this->module->l('Are you sure you want to clear the saved session?', 'AdminPrestaShiftMigrationController'),
                 // Entity labels used in preview and report tables
                 'lbl_products' => $this->module->l('Products', 'AdminPrestaShiftMigrationController'),
@@ -252,11 +268,22 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
 
             $warnings = $this->getVersionWarnings($sourceVersion, $targetVersion);
 
+            // The wizard prints these as HTML and they are whatever the other
+            // shop answered: keep only what a version or a prefix can contain
+            $plain = function ($value) {
+                return preg_replace('/[^0-9A-Za-z._-]/', '', (string)$value);
+            };
+            $prefix = $plain($prefix);
+
+            // thirtybees is a PrestaShop 1.6 for the data, but the operator
+            // knows the shop under its own name and version
+            $sourceLabel = !empty($test['tb_version']) ? 'thirtybees ' . $plain($test['tb_version']) : $plain($sourceVersion);
+
             $methodLabel = ($method === 'direct') ? 'Direct DB' : 'Bridge';
             $response = [
                 'success' => true,
                 'message' => $methodLabel . ' ' . $this->module->l('connected! Prefix detected:', 'AdminPrestaShiftMigrationController') . ' ' . $prefix,
-                'source_version' => $sourceVersion,
+                'source_version' => $sourceLabel,
                 'target_version' => $targetVersion,
                 'warnings' => $warnings,
             ];
@@ -284,6 +311,11 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         if ($srcMajor === 1 && $tgtMajor >= 8) {
             $warnings[] = $this->module->l('redirect_type values will be auto-converted (301→301-product, 302→302-product).', 'AdminPrestaShiftMigrationController');
             $warnings[] = $this->module->l('Column id_product_redirected renamed to id_type_redirected — handled automatically.', 'AdminPrestaShiftMigrationController');
+        }
+
+        // PS 1.6 / thirtybees (1.6.1.999): passwords are md5(cookie key + password)
+        if (preg_match('/^1\.[0-6]\./', (string)$sourceVersion)) {
+            $warnings[] = $this->module->l('Passwords created under PrestaShop 1.6 depend on the cookie key of the source shop. Customers and employees can log in here with their old password only if this shop uses the same cookie key — otherwise they must reset it. See the README.', 'AdminPrestaShiftMigrationController');
         }
 
         // PS 1.7 or 8 → 9
@@ -464,6 +496,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         });
 
         ob_start();
+        $this->holdMigrationLock();
 
         $method = Tools::getValue('connection_method', 'bridge');
         $config = [
@@ -517,6 +550,8 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             if (!empty($config['options']['clean_target'])) {
                 $cleanup = new \PrestaShift\Service\CleanupService();
                 $cleanup->cleanTargetShop($config['scope']);
+                // What earlier runs recorded as synchronised has just been deleted
+                $manager->forgetSyncHistory($config['scope']);
             }
             
             // CLEAR PREVIOUS SAVED STATE if this is a fresh start
@@ -593,6 +628,21 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             }
         } elseif ($catalogMigrated) {
             $tasks[] = ['label' => $this->module->l('Search index skipped — large catalog, rebuild it in Shop Parameters > Search.', 'AdminPrestaShiftMigrationController'), 'ok' => true];
+        }
+
+        // Old addresses: the .htaccess and nginx rules, and the block in .htaccess when that was
+        // chosen. Before the caches are cleared: the .htaccess check requests the shop, and its
+        // first page after a cache clear can take longer than the check waits.
+        $urls = null;
+        if (!empty($scope['catalog']) || !empty($scope['cms']) || !empty($scope['manufacturers']) || !empty($scope['suppliers'])) {
+            try {
+                $options = (is_array($config) && isset($config['options']) && is_array($config['options'])) ? $config['options'] : [];
+                $targetShop = isset($options['target_shop_id']) ? (int) $options['target_shop_id'] : 1;
+                $urls = \PrestaShift\Service\UrlRedirects::finish($options, $targetShop);
+                $tasks[] = ['label' => sprintf($this->module->l('Old addresses that change: %d', 'AdminPrestaShiftMigrationController'), $urls['count']), 'ok' => true];
+            } catch (\Throwable $e) {
+                $tasks[] = ['label' => $this->module->l('The redirects of the old addresses could not be written', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
+            }
         }
 
         // 3. Clear Smarty cache
@@ -686,35 +736,35 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             }
         }
 
-        // 7. Generate redirect map
-        $redirectFile = null;
-        try {
-            $savedState = (new \PrestaShift\Service\MigrationManager())->getSavedState();
-            if (!$savedState) {
-                $savedState = json_decode(\Configuration::get('PRESTASHIFT_LAST_CONFIG'), true);
-            }
-            // LAST_CONFIG holds the config itself; a saved state wraps it
-            $cfg = (is_array($savedState) && isset($savedState['config'])) ? $savedState['config'] : $savedState;
-            if (is_array($cfg) && isset($cfg['db_prefix'])) {
-                $manager = new \PrestaShift\Service\MigrationManager();
-                $conn = $manager->getConnection($cfg);
-                \PrestaShift\Service\IdMapper::begin($conn, $cfg['db_prefix'], $cfg);
-                $redirectFile = \PrestaShift\Service\RedirectMapService::generate(
-                    $conn, $cfg['db_prefix'], $cfg['source_url'] ?? ''
-                );
-                if ($redirectFile && file_exists($redirectFile)) {
-                    $tasks[] = ['label' => $this->module->l('Redirect map generated:', 'AdminPrestaShiftMigrationController') . ' ' . basename($redirectFile), 'ok' => true];
-                }
-            }
-        } catch (\Throwable $e) {
-            $tasks[] = ['label' => $this->module->l('Redirect map generation failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
-        }
-
-        $response = ['success' => true, 'tasks' => $tasks, 'report' => $report, 'redirect_file' => $redirectFile];
+        $response = ['success' => true, 'tasks' => $tasks, 'report' => $report, 'urls' => $urls];
         $json = json_encode($response);
         ob_end_clean();
         header('Content-Type: application/json');
         die($json);
+    }
+
+    /**
+     * The .htaccess or nginx rules of the last migration as a file. Only the
+     * two generated files can come out of here: the name is not taken from
+     * the request.
+     */
+    public function ajaxProcessdownloadRedirects()
+    {
+        $path = \PrestaShift\Service\UrlRedirects::filePath((string) Tools::getValue('type'));
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        if (!$path) {
+            header('HTTP/1.1 404 Not Found');
+            header('Content-Type: text/plain; charset=utf-8');
+            die('Not found');
+        }
+        header('Content-Type: text/plain; charset=utf-8');
+        header('X-Content-Type-Options: nosniff');
+        header('Content-Disposition: attachment; filename="' . basename($path) . '"');
+        header('Content-Length: ' . filesize($path));
+        readfile($path);
+        exit;
     }
 
     public function ajaxProcessrunBatch()
@@ -731,6 +781,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         });
 
         ob_start();
+        $this->holdMigrationLock();
         $stateRaw = Tools::getValue('state');
         
         // Decode JSON state if string (sent via JSON.stringify in JS)
@@ -742,7 +793,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         
         try {
             $manager = new \PrestaShift\Service\MigrationManager();
-            if (!is_array($state) || (!$state['config']['use_bridge'] && empty($state['config']['db_host']))) {
+            if (!is_array($state) || (empty($state['config']['use_bridge']) && empty($state['config']['db_host']))) {
                  // Fallback info for debugging
                  $type = gettype($stateRaw);
                  throw new Exception("Invalid Migration State received. Config missing. Type: $type. Raw: " . substr(print_r($stateRaw, true), 0, 100));
@@ -750,15 +801,18 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $response = $manager->processBatch($state);
             
         } catch (Throwable $e) {
-            // TELEMETRY: If user agreed, send the error report
-            $config = $this->getMigrationConfig($state);
-            $telemetry = new \PrestaShift\Service\TelemetryService();
-            $telemetry->sendErrorReport([
-                'message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString()
-            ], $config);
+            // TELEMETRY: If user agreed, send the error report — once per
+            // failure, not for every automatic attempt that repeats it
+            if (!(int)Tools::getValue('attempt')) {
+                $config = $this->getMigrationConfig($state);
+                $telemetry = new \PrestaShift\Service\TelemetryService();
+                $telemetry->sendErrorReport([
+                    'message' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'trace' => $e->getTraceAsString()
+                ], $config);
+            }
 
             $response = [
                 'success' => false,
@@ -771,6 +825,38 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         ob_end_clean();
         header('Content-Type: application/json');
         die($json);
+    }
+
+    /**
+     * One migration request at a time. A request the browser gave up on
+     * (gateway timeout, dropped connection) keeps running on the server while
+     * the browser sends the same batch again. Without the lock every new
+     * attempt would start the same work next to the ones still running, on a
+     * server that is already too slow, and two of them reaching the same
+     * record together can give it two ids. The lock ends with the database
+     * connection of this request, so a request that crashes cannot leave it
+     * behind.
+     */
+    private function holdMigrationLock()
+    {
+        try {
+            $held = Db::getInstance()->getValue("SELECT GET_LOCK('" . pSQL('prestashift_' . md5(_DB_NAME_ . _DB_PREFIX_)) . "', 0)", false);
+        } catch (Exception $e) {
+            return;
+        }
+
+        // Anything but a plain "no" (NULL: the server could not tell) must not block the migration
+        if ((string)$held !== '0') {
+            return;
+        }
+
+        ob_end_clean();
+        header('Content-Type: application/json');
+        die(json_encode([
+            'success' => false,
+            'busy' => true,
+            'message' => $this->module->l('The shop is still working on the previous migration request. Waiting for it to finish...', 'AdminPrestaShiftMigrationController'),
+        ]));
     }
 
     private function getMigrationConfig($state = null)
@@ -826,11 +912,24 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
     {
         ob_start();
         try {
+            // Same connection as the rest of the wizard: without the method the
+            // manager fell back to the bridge, and a Direct DB migration got
+            // "403 Forbidden. Check your token." instead of the status list
+            $method = Tools::getValue('connection_method', 'bridge');
             $config = [
-                'bridge_token' => Tools::getValue('bridge_token'),
-                'source_url' => Tools::getValue('source_url'),
+                'connection_method' => $method,
+                'source_url' => rtrim(Tools::getValue('source_url', ''), '/'),
                 'db_prefix' => Tools::getValue('db_prefix', 'ps_')
             ];
+            if ($method === 'direct') {
+                $config['db_host'] = Tools::getValue('db_host', 'localhost');
+                $config['db_port'] = (int)Tools::getValue('db_port', 3306);
+                $config['db_name'] = Tools::getValue('db_name');
+                $config['db_user'] = Tools::getValue('db_user');
+                $config['db_pass'] = Tools::getValue('db_pass', '');
+            } else {
+                $config['bridge_token'] = Tools::getValue('bridge_token');
+            }
 
             $manager = new \PrestaShift\Service\MigrationManager();
             $conn = $manager->getConnection($config);

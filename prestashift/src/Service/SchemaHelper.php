@@ -16,6 +16,12 @@ class SchemaHelper
 {
     private static $columnsCache = [];
 
+    /** @var array table => [column => ['type', 'nullable', 'default']] */
+    private static $definitionsCache = [];
+
+    /** @var array table => ['count' => int, 'error' => string] — rows the target refused in this request */
+    private static $failures = [];
+
     /**
      * Target shop ID — used by all migration steps instead of hardcoded 1
      */
@@ -53,15 +59,102 @@ class SchemaHelper
         }
 
         $columns = [];
+        $definitions = [];
         if ($result) {
             foreach ($result as $row) {
                 // Key 'Field' contains the column name
                 $columns[] = $row['Field'];
+                $definitions[$row['Field']] = [
+                    'type' => (string)$row['Type'],
+                    'nullable' => $row['Null'] === 'YES',
+                    'default' => $row['Default'],
+                ];
             }
         }
 
         self::$columnsCache[$table] = $columns;
+        self::$definitionsCache[$table] = $definitions;
         return $columns;
+    }
+
+    /**
+     * Adapts a row to what the target columns accept.
+     *
+     * An older source has fewer columns and looser ones: PrestaShop 1.6 has no
+     * product.show_condition and allows NULL in attribute.color, both NOT NULL
+     * in later versions. MySQL refuses the whole row for a single NULL like
+     * that, so such a column is left out and takes its default instead. An ENUM
+     * value the target does not know (redirect_type '' in PrestaShop 9) would
+     * be stored as an invalid empty value; it becomes the column default too.
+     *
+     * @param string $table Table name without prefix
+     * @param array $data Row already reduced to existing columns
+     * @return array
+     */
+    private static function fitToTarget($table, array $data)
+    {
+        $definitions = self::$definitionsCache[$table];
+
+        foreach ($data as $column => $value) {
+            $definition = $definitions[$column];
+
+            if ($value === null) {
+                if (!$definition['nullable']) {
+                    unset($data[$column]);
+                }
+                continue;
+            }
+
+            $allowed = self::enumValues($definition['type']);
+            if ($allowed === null || in_array(strtolower((string)$value), $allowed, true)) {
+                continue;
+            }
+            if ($definition['default'] !== null || $definition['nullable']) {
+                $data[$column] = $definition['default'];
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * Puts an empty text where the given columns are NULL or missing.
+     *
+     * PrestaShop never stores NULL in the text fields of its own objects, and
+     * the back office of PrestaShop 1.7.7+ refuses to open a product, a
+     * combination or an order that has one ("must be of type string, null
+     * given"). NULLs come from sources that lack the column (isbn and mpn in
+     * PrestaShop 1.6) or allow NULL in it (ean13, upc, reference).
+     *
+     * @param array $row
+     * @param array $columns
+     * @return array
+     */
+    public static function blankNulls(array $row, array $columns)
+    {
+        foreach ($columns as $column) {
+            if (!isset($row[$column])) {
+                $row[$column] = '';
+            }
+        }
+
+        return $row;
+    }
+
+    /**
+     * Values of an ENUM column type, lower-cased (MySQL compares them
+     * case-insensitively); null for any other type.
+     */
+    private static function enumValues($type)
+    {
+        if (stripos($type, 'enum(') !== 0) {
+            return null;
+        }
+        preg_match_all("/'((?:[^']|'')*)'/", $type, $matches);
+
+        return array_map(function ($value) {
+            return strtolower(str_replace("''", "'", $value));
+        }, $matches[1]);
     }
 
     /**
@@ -98,6 +191,12 @@ class SchemaHelper
             return '';
         }
 
+        $filtered = self::fitToTarget($table, $filtered);
+
+        if (empty($filtered)) {
+            return '';
+        }
+
         $keys = array_keys($filtered);
         $values = array_values($filtered);
 
@@ -127,6 +226,9 @@ class SchemaHelper
     public static function buildUpsertQuery($table, $data, $excludeFromUpdate = [])
     {
         $filtered = self::filterData($table, $data);
+        if (empty($filtered)) return '';
+
+        $filtered = self::fitToTarget($table, $filtered);
         if (empty($filtered)) return '';
 
         $keys = array_keys($filtered);
@@ -166,7 +268,7 @@ class SchemaHelper
         $sql = self::buildUpsertQuery($table, $data, $excludeFromUpdate);
         if (empty($sql)) return true;
 
-        return Db::getInstance()->execute($sql);
+        return self::write($table, $sql);
     }
 
     /**
@@ -177,7 +279,54 @@ class SchemaHelper
         $sql = self::buildInsertQuery($table, $data, true);
         if (empty($sql)) return true;
 
-        return Db::getInstance()->execute(preg_replace('/^INSERT INTO/', 'INSERT IGNORE INTO', $sql));
+        return self::write($table, preg_replace('/^INSERT INTO/', 'INSERT IGNORE INTO', $sql));
+    }
+
+    /**
+     * Runs a write and keeps track of what the target refused. A refused row
+     * used to vanish without a trace: the steps skip it and carry on, so a
+     * migration could end "successfully" with a whole entity missing.
+     *
+     * @param string $table Table name without prefix
+     * @param string $sql
+     * @return bool
+     */
+    private static function write($table, $sql)
+    {
+        try {
+            $done = (bool)Db::getInstance()->execute($sql);
+            $error = $done ? '' : (string)Db::getInstance()->getMsgError();
+        } catch (\Exception $e) {
+            // PrestaShop's debug mode turns a refused query into an exception
+            // carrying the whole statement; the first line is the MySQL error
+            $done = false;
+            $error = trim(strip_tags(preg_replace('/<br\b.*$/s', '', $e->getMessage())));
+        }
+
+        if (!$done) {
+            if (!isset(self::$failures[$table])) {
+                // MySQL quotes the refused value in its message, and that value
+                // is data of the source shop: wherever the message ends up
+                // being shown, it must not be readable as markup
+                self::$failures[$table] = ['count' => 0, 'error' => str_replace(['<', '>'], '', $error)];
+            }
+            self::$failures[$table]['count']++;
+        }
+
+        return $done;
+    }
+
+    /**
+     * Rows refused by the target since the last call, then forgotten.
+     *
+     * @return array table => ['count' => int, 'error' => first MySQL error]
+     */
+    public static function pullFailures()
+    {
+        $failures = self::$failures;
+        self::$failures = [];
+
+        return $failures;
     }
 
     public static function hasTable($table)

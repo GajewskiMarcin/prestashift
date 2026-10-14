@@ -111,6 +111,11 @@ class ConfigurationMigrationStep
 
     private function importConfig($name, $value)
     {
+        // URL patterns follow the URL option of the migration (UrlMapStep)
+        if (strpos($name, 'PS_ROUTE_') === 0) {
+            return false;
+        }
+
         if (isset(self::$idKeys[$name])) {
             $entity = self::$idKeys[$name];
             $translated = $entity === 'lang' ? LanguageMapper::toTarget((int)$value) : IdMapper::ref($entity, (int)$value);
@@ -146,7 +151,9 @@ class ConfigurationMigrationStep
         $values = [];
         foreach ($rows as $row) {
             $name = $keysById[(int)$row['id_configuration']];
-            $values[$name][(int)$row['id_lang']] = $row['value'];
+            if (strpos($name, 'PS_ROUTE_') !== 0) {
+                $values[$name][(int)$row['id_lang']] = $row['value'];
+            }
         }
 
         foreach ($values as $name => $byLang) {
