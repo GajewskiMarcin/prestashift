@@ -105,6 +105,9 @@
         </div>
     </div>
 
+    {* Old addresses: filled by admin.js from the post-migration answer *}
+    <div id="url-report" class="ps-card ps-p-6 ps-space-y-4" style="display: none;"></div>
+
     <div class="ps-card ps-p-8 ps-bg-blue-50 ps-border-blue-100" style="border-radius: 12px;">
         <div class="ps-text-center ps-space-y-4">
             <div style="display: flex; justify-content: center; margin-bottom: 1rem;">

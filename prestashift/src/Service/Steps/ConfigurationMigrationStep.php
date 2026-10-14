@@ -111,6 +111,11 @@ class ConfigurationMigrationStep
 
     private function importConfig($name, $value)
     {
+        // URL patterns follow the URL option of the migration (UrlMapStep)
+        if (strpos($name, 'PS_ROUTE_') === 0) {
+            return false;
+        }
+
         if (isset(self::$idKeys[$name])) {
             $entity = self::$idKeys[$name];
             $translated = $entity === 'lang' ? LanguageMapper::toTarget((int)$value) : IdMapper::ref($entity, (int)$value);
@@ -121,49 +126,7 @@ class ConfigurationMigrationStep
             $value = (int)$translated;
         }
 
-        $value = $this->usableRoute($name, $value);
-        if ($value === false) {
-            return false;
-        }
-
         return (bool)\Configuration::updateValue($name, $value);
-    }
-
-    /**
-     * A URL pattern is copied only if this shop can read it.
-     *
-     * thirtybees builds its addresses without ids ({categories:/}{rewrite});
-     * PrestaShop cannot resolve such a pattern, and with it in place the home
-     * page and every product answer 404. A product pattern written for
-     * PrestaShop 1.6 only lacks the combination, which later versions require:
-     * it is added as an option, so the old addresses stay as they are.
-     *
-     * @return mixed the value to write (any value that is not a URL pattern
-     *               comes back untouched), false when the pattern is unusable
-     */
-    private function usableRoute($name, $rule)
-    {
-        if (strpos($name, 'PS_ROUTE_') !== 0 || (string)$rule === '') {
-            return $rule;
-        }
-
-        $route = substr($name, strlen('PS_ROUTE_'));
-        $dispatcher = \Dispatcher::getInstance();
-        $errors = [];
-        if ($dispatcher->validateRoute($route, $rule, $errors)) {
-            return $rule;
-        }
-
-        if ($route === 'product_rule' && strpos($rule, 'id_product_attribute') === false) {
-            $withCombination = str_replace('{id}', '{id}{-:id_product_attribute}', $rule);
-            if ($dispatcher->validateRoute($route, $withCombination, $errors)) {
-                return $withCombination;
-            }
-        }
-
-        LogService::getInstance()->warning("URL pattern $name of the source ($rule) cannot be used in this PrestaShop version — the default pattern is kept, the old addresses of these pages change.");
-
-        return false;
     }
 
     /**
@@ -188,9 +151,8 @@ class ConfigurationMigrationStep
         $values = [];
         foreach ($rows as $row) {
             $name = $keysById[(int)$row['id_configuration']];
-            $value = $this->usableRoute($name, $row['value']);
-            if ($value !== false) {
-                $values[$name][(int)$row['id_lang']] = $value;
+            if (strpos($name, 'PS_ROUTE_') !== 0) {
+                $values[$name][(int)$row['id_lang']] = $row['value'];
             }
         }
 

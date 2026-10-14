@@ -19,7 +19,7 @@ Professional data migration tool for PrestaShop. Migrate your shop data from Pre
 - **Post-migration tasks** — auto rebuilds search index, category tree, clears cache
 - **Dry run preview** — see record counts before migrating
 - **File logging** — detailed logs in `var/logs/prestashift.log`
-- **Redirect map** — generates 301 redirect file for SEO preservation
+- **Old addresses kept or redirected** — the URL patterns of the old shop, `.htaccess` rules or nginx rules, with the module as fallback; see [Old addresses (URLs)](#old-addresses-urls)
 - **Status mapping** — map order statuses between source and target
 - **Interface languages** — English, Polish, French, Spanish, Portuguese, Italian, German
 - **Selective configuration** — migrates safe shop settings (name, SEO, shipping, etc.)
@@ -107,6 +107,34 @@ affected.
 
 **Zones.** Carrier zones are matched by name. thirtybees calls the European zone `Europe (EU)`:
 pair it with `Europe` in the zone mapping of the Options step, or its delivery prices are skipped.
+
+## Old addresses (URLs)
+
+Search engines and other sites link to the addresses of the old shop. PrestaShop 1.6, 1.7, 8, 9 and
+thirtybees do not build them the same way (a 1.6 product is `/tshirts/1-faded-t-shirt.html`, the
+same product on PrestaShop 9 `/1-faded-t-shirt.html`). The *Old addresses (URLs)* option of the
+Options step decides what happens to them:
+
+| Option | What the migration does | What you do |
+|--------|-------------------------|-------------|
+| Keep the old addresses (default) | Copies the URL patterns of the old shop (SEO & URLs) into the new one: per language on PrestaShop 9, one for all languages on 1.7 and 8 (that is how they read them) | Nothing |
+| .htaccess — 301 / 302 | Writes one rule per old address into the `.htaccess` of the shop, above `# ~~start~~` (PrestaShop keeps it when it rewrites the file), after saving a copy of the file to `var/logs/`. If the shop answers with an error afterwards, the copy is put back | Nothing on Apache / LiteSpeed |
+| nginx rules — 301 / 302 | Shows the rules at the end of the migration and keeps them as a file to download | Paste them into the `server` block, reload nginx |
+
+The old addresses are rebuilt from the database of the old shop (its patterns, or the defaults of its
+version), the new ones by PrestaShop itself. Only those that differ are kept. Both rule files can be
+downloaded from the last screen whatever the option, so they can be put on the server later.
+
+**Fallback.** While the module is enabled it redirects, by itself, any old address that still
+reaches PrestaShop (1.7.1 and later: the hook it uses does not exist in 1.7.0): a pattern the new version cannot use (thirtybees addresses have no ID), a page
+that got another ID because the target already had data, rules that the server does not apply.
+This costs one database query per page while there are old addresses to redirect. When the
+patterns were kept, or the server applies the rules, the module can be disabled.
+
+Not covered: shops whose old addresses carried keywords that cannot be rebuilt from the database
+(`{price}`, `{tags}`); an old shop with friendly URLs off (its `index.php?id_product=…` addresses
+keep working while the IDs stay the same); a new shop with friendly URLs off (nothing is mapped,
+the log says so); multistore sources.
 
 ## Security
 

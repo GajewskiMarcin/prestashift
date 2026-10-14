@@ -47,6 +47,7 @@ class MigrationManager
         'wishlist', 'stock_mvt',
         'product_comments',
         'configuration',
+        'urls',
         'integrity'
     ];
 
@@ -94,6 +95,8 @@ class MigrationManager
         'stock_mvt'          => 'catalog',
         'product_comments'   => 'reviews',
         'configuration'      => 'configuration',
+        // The addresses of every page type: runs when any of them is migrated
+        'urls'               => ['catalog', 'cms', 'manufacturers', 'suppliers'],
         'integrity'          => '*',
     ];
 
@@ -213,7 +216,7 @@ class MigrationManager
         $dates = $this->readSyncDates();
         foreach ($dates as $source => $tasks) {
             foreach (self::$taskScopeMap as $task => $scopeKey) {
-                if (is_array($scope) && !empty($scope[$scopeKey])) {
+                if (is_array($scope) && is_string($scopeKey) && !empty($scope[$scopeKey])) {
                     unset($dates[$source][$task]);
                 }
             }
@@ -280,6 +283,11 @@ class MigrationManager
         $requiredScope = isset(self::$taskScopeMap[$task]) ? self::$taskScopeMap[$task] : null;
         if ($requiredScope === '*') {
             return true; // runs for every migration
+        }
+        if (is_array($requiredScope)) {
+            return (bool) array_filter($requiredScope, function ($scopeKey) use ($scope) {
+                return !empty($scope[$scopeKey]);
+            });
         }
         return $requiredScope && !empty($scope[$requiredScope]);
     }
@@ -878,9 +886,24 @@ class MigrationManager
                 $message = $this->l('Migrating shop configuration...');
                 if ($result['finished']) {
                     $this->updateSyncHistory('configuration', date('Y-m-d H:i:s'));
-                    $state['current_task'] = 'integrity';
+                    $state['current_task'] = 'urls';
                     $state['offset'] = 0;
                     $message = $this->l('Configuration done. Checking data integrity...');
+                }
+                break;
+
+            // Old address → new address of the migrated pages, for the redirects
+            case 'urls':
+                $step = new Steps\UrlMapStep($conn, $prefix, isset($config['options']) && is_array($config['options']) ? $config['options'] : []);
+                $result = $step->process(isset($state['url_entity']) ? $state['url_entity'] : null, $offset, $limit);
+                $message = $this->l('Mapping the old addresses to the new ones...');
+                if ($result['finished']) {
+                    unset($state['url_entity']);
+                    $state['current_task'] = 'integrity';
+                    $state['offset'] = 0;
+                } else {
+                    $state['url_entity'] = $result['entity'];
+                    $state['offset'] = $result['offset'];
                 }
                 break;
 

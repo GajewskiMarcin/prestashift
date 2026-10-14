@@ -65,12 +65,57 @@ class PrestaShift extends Module
 
     public function install()
     {
-        if (!parent::install() || !$this->installTab()) {
+        if (!parent::install() || !$this->installTab() || !$this->registerHook('actionDispatcherBefore')) {
             return false;
         }
         \PrestaShift\Service\IdMapper::ensureTables();
+        \PrestaShift\Service\UrlRedirects::ensureTable();
 
         return true;
+    }
+
+    /**
+     * Fallback for the old addresses of the migrated shop: when neither the
+     * copied URL patterns, nor .htaccess, nor the nginx rules took a visitor
+     * from an old address to the new one, the module does. Runs before the
+     * controller: an old address whose record changed id gives no 404, it
+     * shows another record. Costs one query per page while the table of old
+     * addresses is not empty; the module can be disabled once the server
+     * redirects them itself.
+     */
+    public function hookActionDispatcherBefore($params)
+    {
+        $method = isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : 'GET';
+        if (!(int) Configuration::get(\PrestaShift\Service\UrlRedirects::COUNT_KEY)
+            || !isset($params['controller_type']) || (int) $params['controller_type'] !== Dispatcher::FC_FRONT
+            || !in_array($method, ['GET', 'HEAD'], true)
+            || !isset($_SERVER['REQUEST_URI'])) {
+            return;
+        }
+
+        try {
+            $path = rawurldecode((string) parse_url((string) $_SERVER['REQUEST_URI'], PHP_URL_PATH));
+            $idShop = (int) $this->context->shop->id;
+            $row = \PrestaShift\Service\UrlRedirects::lookup($path, $idShop);
+            if (!$row) {
+                return;
+            }
+            // Built by Link from the record: the destination never comes from the request
+            $url = \PrestaShift\Service\UrlRedirects::targetUrl($this->context->link, $row['entity'], $row['id_target'], $row['id_lang'], $idShop);
+            if ($url === '' || rawurldecode((string) parse_url($url, PHP_URL_PATH)) === $path) {
+                return;
+            }
+            if (!empty($_SERVER['QUERY_STRING'])) {
+                $url .= (strpos($url, '?') === false ? '?' : '&') . $_SERVER['QUERY_STRING'];
+            }
+            $code = (int) Configuration::get(\PrestaShift\Service\UrlRedirects::CODE_KEY) === 302 ? 302 : 301;
+        } catch (\Throwable $e) {
+            return;
+        }
+
+        header(\PrestaShift\Service\UrlRedirects::FALLBACK_HEADER . ': fallback');
+        header('Location: ' . $url, true, $code);
+        exit;
     }
 
     // The id map tables are kept on uninstall on purpose: removing the module

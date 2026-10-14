@@ -78,6 +78,20 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                 'network_error' => $this->module->l('Communication Error (Network/Timeout). Click Resume to retry this batch.', 'AdminPrestaShiftMigrationController'),
                 'retry_wait' => $this->module->l('Trying again in %1$d seconds (attempt %2$d of %3$d)...', 'AdminPrestaShiftMigrationController'),
                 'retry_gave_up' => $this->module->l('Still failing after %d attempts — migration paused. Click Resume to try again.', 'AdminPrestaShiftMigrationController'),
+                // Old addresses, last screen
+                'urls_title' => $this->module->l('Old addresses', 'AdminPrestaShiftMigrationController'),
+                'urls_none' => $this->module->l('Every old address works here as it is: there is nothing to redirect, and PrestaShift can be disabled.', 'AdminPrestaShiftMigrationController'),
+                'urls_count' => $this->module->l('%d old addresses differ in this shop.', 'AdminPrestaShiftMigrationController'),
+                'urls_match_left' => $this->module->l('They could not be kept: the page has another ID here, or this PrestaShop cannot use the URL pattern of the source. PrestaShift redirects them while it is enabled; to disable it, put the .htaccess or nginx rules below on the server.', 'AdminPrestaShiftMigrationController'),
+                'urls_ht_verified' => $this->module->l('The rules are in the .htaccess of the shop and the server applies them: PrestaShift can be disabled. Copy of the previous file: %s', 'AdminPrestaShiftMigrationController'),
+                'urls_ht_unverified' => $this->module->l('The rules are in the .htaccess of the shop (copy of the previous file: %s), but the shop could not be reached to check them. Keep PrestaShift enabled until an old address opens the new page.', 'AdminPrestaShiftMigrationController'),
+                'urls_ht_ignored' => $this->module->l('The rules are in the .htaccess of the shop (copy of the previous file: %s), but the server does not apply them — is it nginx? PrestaShift redirects the old addresses while it is enabled.', 'AdminPrestaShiftMigrationController'),
+                'urls_ht_restored' => $this->module->l('With the rules in .htaccess the shop answered with an error, so the previous file was put back. PrestaShift redirects the old addresses while it is enabled.', 'AdminPrestaShiftMigrationController'),
+                'urls_ht_failed' => $this->module->l('The .htaccess of the shop could not be changed. Download the rules and add them above the line # ~~start~~. Until then PrestaShift redirects the old addresses.', 'AdminPrestaShiftMigrationController'),
+                'urls_nginx' => $this->module->l('Paste these rules into the server block of the shop, above location /, and reload nginx. Once they work PrestaShift can be disabled; until then it redirects the old addresses itself.', 'AdminPrestaShiftMigrationController'),
+                'urls_outside' => $this->module->l('%d of them lie outside the folder of this shop: only the nginx rules can redirect them.', 'AdminPrestaShiftMigrationController'),
+                'urls_download_htaccess' => $this->module->l('Download the .htaccess rules', 'AdminPrestaShiftMigrationController'),
+                'urls_download_nginx' => $this->module->l('Download the nginx rules', 'AdminPrestaShiftMigrationController'),
                 'confirm_clear_session' => $this->module->l('Are you sure you want to clear the saved session?', 'AdminPrestaShiftMigrationController'),
                 // Entity labels used in preview and report tables
                 'lbl_products' => $this->module->l('Products', 'AdminPrestaShiftMigrationController'),
@@ -616,6 +630,21 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $tasks[] = ['label' => $this->module->l('Search index skipped — large catalog, rebuild it in Shop Parameters > Search.', 'AdminPrestaShiftMigrationController'), 'ok' => true];
         }
 
+        // Old addresses: the .htaccess and nginx rules, and the block in .htaccess when that was
+        // chosen. Before the caches are cleared: the .htaccess check requests the shop, and its
+        // first page after a cache clear can take longer than the check waits.
+        $urls = null;
+        if (!empty($scope['catalog']) || !empty($scope['cms']) || !empty($scope['manufacturers']) || !empty($scope['suppliers'])) {
+            try {
+                $options = (is_array($config) && isset($config['options']) && is_array($config['options'])) ? $config['options'] : [];
+                $targetShop = isset($options['target_shop_id']) ? (int) $options['target_shop_id'] : 1;
+                $urls = \PrestaShift\Service\UrlRedirects::finish($options, $targetShop);
+                $tasks[] = ['label' => sprintf($this->module->l('Old addresses that change: %d', 'AdminPrestaShiftMigrationController'), $urls['count']), 'ok' => true];
+            } catch (\Throwable $e) {
+                $tasks[] = ['label' => $this->module->l('The redirects of the old addresses could not be written', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
+            }
+        }
+
         // 3. Clear Smarty cache
         try {
             \Tools::clearSmartyCache();
@@ -707,35 +736,35 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             }
         }
 
-        // 7. Generate redirect map
-        $redirectFile = null;
-        try {
-            $savedState = (new \PrestaShift\Service\MigrationManager())->getSavedState();
-            if (!$savedState) {
-                $savedState = json_decode(\Configuration::get('PRESTASHIFT_LAST_CONFIG'), true);
-            }
-            // LAST_CONFIG holds the config itself; a saved state wraps it
-            $cfg = (is_array($savedState) && isset($savedState['config'])) ? $savedState['config'] : $savedState;
-            if (is_array($cfg) && isset($cfg['db_prefix'])) {
-                $manager = new \PrestaShift\Service\MigrationManager();
-                $conn = $manager->getConnection($cfg);
-                \PrestaShift\Service\IdMapper::begin($conn, $cfg['db_prefix'], $cfg);
-                $redirectFile = \PrestaShift\Service\RedirectMapService::generate(
-                    $conn, $cfg['db_prefix'], $cfg['source_url'] ?? ''
-                );
-                if ($redirectFile && file_exists($redirectFile)) {
-                    $tasks[] = ['label' => $this->module->l('Redirect map generated:', 'AdminPrestaShiftMigrationController') . ' ' . basename($redirectFile), 'ok' => true];
-                }
-            }
-        } catch (\Throwable $e) {
-            $tasks[] = ['label' => $this->module->l('Redirect map generation failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
-        }
-
-        $response = ['success' => true, 'tasks' => $tasks, 'report' => $report, 'redirect_file' => $redirectFile];
+        $response = ['success' => true, 'tasks' => $tasks, 'report' => $report, 'urls' => $urls];
         $json = json_encode($response);
         ob_end_clean();
         header('Content-Type: application/json');
         die($json);
+    }
+
+    /**
+     * The .htaccess or nginx rules of the last migration as a file. Only the
+     * two generated files can come out of here: the name is not taken from
+     * the request.
+     */
+    public function ajaxProcessdownloadRedirects()
+    {
+        $path = \PrestaShift\Service\UrlRedirects::filePath((string) Tools::getValue('type'));
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        if (!$path) {
+            header('HTTP/1.1 404 Not Found');
+            header('Content-Type: text/plain; charset=utf-8');
+            die('Not found');
+        }
+        header('Content-Type: text/plain; charset=utf-8');
+        header('X-Content-Type-Options: nosniff');
+        header('Content-Disposition: attachment; filename="' . basename($path) . '"');
+        header('Content-Length: ' . filesize($path));
+        readfile($path);
+        exit;
     }
 
     public function ajaxProcessrunBatch()

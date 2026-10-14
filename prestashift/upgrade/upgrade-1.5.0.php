@@ -22,5 +22,8 @@ function upgrade_module_1_5_0($module)
 {
     Configuration::deleteByName('PRESTASHIFT_SYNC_HISTORY');
 
-    return true;
+    // Old addresses of the migrated shop, redirected by the module as a fallback
+    \PrestaShift\Service\UrlRedirects::ensureTable();
+
+    return $module->registerHook('actionDispatcherBefore');
 }

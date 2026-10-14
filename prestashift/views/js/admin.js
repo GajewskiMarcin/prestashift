@@ -521,6 +521,8 @@ var PrestaShift = {
                     $('#final-stats-grid').html(statsHtml);
                 }
 
+                PrestaShift.showUrlReport(response.urls);
+
                 $('#main-progress-bar').css('width', '100%');
                 $('#main-progress-text').text('100%');
                 $('#migration-progress-container').hide();
@@ -532,6 +534,57 @@ var PrestaShift = {
                 $('#migration-finished-container').show();
             }
         });
+    },
+
+    // What happened to the old addresses of the source, and the server rules
+    // to download. Translations are HTML already; what the server reports
+    // (file name, rules) is escaped.
+    showUrlReport: function (urls) {
+        var $box = $('#url-report');
+        if (!$box.length || !urls) {
+            return;
+        }
+
+        var count = parseInt(urls.count, 10) || 0;
+        var lines = [];
+        if (!count) {
+            lines.push(PrestaShift.t('urls_none'));
+        } else {
+            lines.push(PrestaShift.t('urls_count').replace('%d', count));
+            if (urls.mode === 'match') {
+                lines.push(PrestaShift.t('urls_match_left'));
+            } else if (String(urls.mode).indexOf('htaccess') === 0) {
+                var keys = { verified: 'urls_ht_verified', unverified: 'urls_ht_unverified', ignored: 'urls_ht_ignored', restored: 'urls_ht_restored' };
+                var status = urls.htaccess && keys[urls.htaccess.status] ? keys[urls.htaccess.status] : 'urls_ht_failed';
+                var backup = urls.htaccess && urls.htaccess.backup ? PrestaShift.escapeHtml(urls.htaccess.backup) : '';
+                lines.push(PrestaShift.t(status).replace('%s', backup));
+            } else {
+                lines.push(PrestaShift.t('urls_nginx'));
+            }
+            if (parseInt(urls.outside, 10) > 0) {
+                lines.push(PrestaShift.t('urls_outside').replace('%d', parseInt(urls.outside, 10)));
+            }
+        }
+
+        var html = '<h3 class="ps-font-semibold ps-text-slate-900">' + PrestaShift.t('urls_title') + '</h3>';
+        $.each(lines, function (i, line) {
+            html += '<p class="ps-text-slate-600">' + line + '</p>';
+        });
+        if (count && String(urls.mode).indexOf('nginx') === 0 && urls.nginx_preview) {
+            html += '<textarea readonly class="ps-input" rows="12" style="width: 100%; font-family: monospace; font-size: 12px;">' + PrestaShift.escapeHtml(urls.nginx_preview) + '</textarea>';
+        }
+        if (count && urls.files) {
+            html += '<div style="display: flex; flex-wrap: wrap; gap: 1rem;">';
+            $.each(['htaccess', 'nginx'], function (i, type) {
+                if (urls.files[type]) {
+                    var href = controller_url + '&ajax=1&action=download_redirects&type=' + type;
+                    html += '<a class="ps-btn ps-btn-outline" href="' + PrestaShift.escapeHtml(href) + '">' + PrestaShift.t('urls_download_' + type) + '</a>';
+                }
+            });
+            html += '</div>';
+        }
+
+        $box.html(html).show();
     },
 
     showVersionWarnings: function () {
