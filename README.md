@@ -93,8 +93,10 @@ The module can e-mail a failure report to the author, to help diagnose migration
 in the Options step.
 
 When enabled, a failed migration sends: the error message and debug payload, your PrestaShop and
-PHP versions, `memory_limit` / `max_execution_time`, the source shop URL, and the e-mail address of
-the logged-in employee. Nothing is sent while the switch is off, and no customer or order data is
+PHP versions, `memory_limit` / `max_execution_time`, the source shop URL, the step the migration
+stopped on and the settings it ran with (batch sizes, delays, scope), what the last call to the
+source shop did, the last lines of the migration log, and the e-mail address of the logged-in
+employee. Nothing is sent while the switch is off, and no customer, order or catalogue data is
 ever transmitted. See [TelemetryService.php](prestashift/src/Service/TelemetryService.php) — it is
 the only code path that sends anything to the author. The module's other outbound connection
 (`ConnectorClient`) talks solely to the source shop URL you configure yourself.

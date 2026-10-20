@@ -17,6 +17,19 @@ class ConnectorClient
     private $url;
     private $token;
 
+    /** @var array what the last request to the source shop did — for error reports */
+    private static $lastRequest = [];
+
+    /**
+     * Timings and outcome of the last call to the source shop. Says whether the
+     * name resolved, whether the connection was established, how long the shop
+     * was given and how much it sent back.
+     */
+    public static function lastRequest()
+    {
+        return self::$lastRequest;
+    }
+
     public function __construct($url, $token)
     {
         $this->url = rtrim($url, '/');
@@ -120,6 +133,16 @@ class ConnectorClient
             $response = curl_exec($ch);
             $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $curlError = curl_errno($ch) ? curl_error($ch) : '';
+            self::$lastRequest = [
+                'action' => $action,
+                'http_code' => $httpCode,
+                'error' => $curlError,
+                'attempt' => $attempt + 1,
+                'dns_lookup_s' => round((float) curl_getinfo($ch, CURLINFO_NAMELOOKUP_TIME), 2),
+                'connect_s' => round((float) curl_getinfo($ch, CURLINFO_CONNECT_TIME), 2),
+                'total_s' => round((float) curl_getinfo($ch, CURLINFO_TOTAL_TIME), 2),
+                'bytes_received' => is_string($response) ? strlen($response) : 0,
+            ];
             curl_close($ch);
 
             // The request never completed: DNS, TLS, a timeout, or the source

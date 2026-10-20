@@ -88,7 +88,7 @@
                 <div class="ps-option-row ps-flex-between">
                     <div>
                          <label class="ps-font-medium ps-text-slate-900">{l s='Send Error Reports to Developer' mod='prestashift'}</label>
-                         <p class="ps-text-sm ps-text-slate-500">{l s='On failure, emails the error details, your PHP/PrestaShop versions, the source shop URL and your admin e-mail address to the module author. Off by default.' mod='prestashift'}</p>
+                         <p class="ps-text-sm ps-text-slate-500">{l s='On failure, emails the module author: the error, where the migration stopped and the settings it ran with, your PHP and PrestaShop versions, the source shop URL, the last lines of the migration log and your admin e-mail address. No customer, order or catalogue data is ever sent. Off by default.' mod='prestashift'}</p>
                     </div>
                      <label class="ps-switch-label">
                         <input type="checkbox" name="options[telemetry]" value="1" class="ps-switch-input">

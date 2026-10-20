@@ -310,7 +310,7 @@ $translations = array(
     'Zone Mapping' => 'Mapowanie stref',
     'Map source zones to target zones for carrier delivery configuration' => 'Przypisz strefy źródłowe do stref docelowych w konfiguracji dostaw przewoźników',
     'Send Error Reports to Developer' => 'Wysyłaj raporty o błędach do autora',
-    'On failure, emails the error details, your PHP/PrestaShop versions, the source shop URL and your admin e-mail address to the module author. Off by default.' => 'W razie błędu wysyła e-mailem szczegóły błędu, wersje PHP/PrestaShop, adres URL sklepu źródłowego oraz adres e-mail administratora do autora modułu. Domyślnie wyłączone.',
+    'On failure, emails the module author: the error, where the migration stopped and the settings it ran with, your PHP and PrestaShop versions, the source shop URL, the last lines of the migration log and your admin e-mail address. No customer, order or catalogue data is ever sent. Off by default.' => 'W razie błędu wysyła autorowi modułu: treść błędu, miejsce zatrzymania migracji wraz z jej ustawieniami, wersje PHP i PrestaShop, adres starego sklepu, ostatnie linie dziennika migracji oraz Twój adres e-mail administratora. Dane klientów, zamówień i katalogu nie są wysyłane nigdy. Domyślnie wyłączone.',
 
     // === Scope step ===
     'Shop Settings' => 'Ustawienia sklepu',
@@ -686,7 +686,7 @@ $phraseMap = array(
     'Zone Mapping' => array('options'),
     'Map source zones to target zones for carrier delivery configuration' => array('options'),
     'Send Error Reports to Developer' => array('options'),
-    'On failure, emails the error details, your PHP/PrestaShop versions, the source shop URL and your admin e-mail address to the module author. Off by default.' => array('options'),
+    'On failure, emails the module author: the error, where the migration stopped and the settings it ran with, your PHP and PrestaShop versions, the source shop URL, the last lines of the migration log and your admin e-mail address. No customer, order or catalogue data is ever sent. Off by default.' => array('options'),
 
     'Shop Settings' => array('scope'),
     'Selected configuration values (name, SEO, shipping, etc.)' => array('scope'),

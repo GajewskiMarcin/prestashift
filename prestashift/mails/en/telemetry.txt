@@ -1,18 +1,26 @@
 PrestaShift Error Report
 =========================
 
-PrestaShop Version: {prestashop_version}
-PHP Version: {php_version}
-Memory Limit: {memory_limit}
-Max Execution Time: {max_execution_time}
+PrestaShift: {module_version}
+Target shop: PrestaShop {prestashop_version}, PHP {php_version}, memory {memory_limit}, max execution {max_execution_time}s
+Source shop: {source_shop}
 Source URL: {source_url}
 Admin Contact: {admin_contact}
 
 Error Message:
 {error_message}
 
+Where it happened:
+{migration_context}
+
+Last call to the source shop:
+{connection_info}
+
 Details:
 {error_details}
+
+Migration log (last lines):
+{log_tail}
 
 Raw Debug Info:
 {debug_info}

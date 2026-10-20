@@ -2,10 +2,9 @@
 <p>An error occurred during migration on a client store.</p>
 <hr>
 <ul>
-    <li><strong>PrestaShop Version:</strong> {prestashop_version}</li>
-    <li><strong>PHP Version:</strong> {php_version}</li>
-    <li><strong>Memory Limit:</strong> {memory_limit}</li>
-    <li><strong>Max Execution Time:</strong> {max_execution_time}</li>
+    <li><strong>PrestaShift:</strong> {module_version}</li>
+    <li><strong>Target shop:</strong> PrestaShop {prestashop_version}, PHP {php_version}, memory {memory_limit}, max execution {max_execution_time}s</li>
+    <li><strong>Source shop:</strong> {source_shop}</li>
     <li><strong>Source URL:</strong> {source_url}</li>
     <li><strong>Admin Contact:</strong> {admin_contact}</li>
 </ul>
@@ -13,8 +12,17 @@
 <h3>Error Message:</h3>
 <p style="color: red; font-weight: bold;">{error_message}</p>
 
+<h3>Where it happened:</h3>
+<pre>{migration_context}</pre>
+
+<h3>Last call to the source shop:</h3>
+<pre>{connection_info}</pre>
+
 <h3>Details:</h3>
 <pre>{error_details}</pre>
+
+<h3>Migration log (last lines):</h3>
+<pre>{log_tail}</pre>
 
 <h3>Raw Debug Info:</h3>
 <pre>{debug_info}</pre>

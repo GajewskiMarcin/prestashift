@@ -248,6 +248,15 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             }
             $prefix = $test['prefix'] ?? $config['db_prefix'];
             $sourceVersion = $test['ps_version'] ?? 'unknown';
+
+            // Remembered for the error reports: knowing the source shop's
+            // PrestaShop, PHP and connector versions saves a round of questions.
+            \Configuration::updateValue('PRESTASHIFT_SOURCE_INFO', json_encode([
+                'ps_version' => $sourceVersion,
+                'php_version' => $test['php_version'] ?? 'unknown',
+                'version' => $test['version'] ?? 'unknown',
+                'prefix' => $prefix,
+            ]));
             $targetVersion = _PS_VERSION_;
 
             $warnings = $this->getVersionWarnings($sourceVersion, $targetVersion);
@@ -757,6 +766,8 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
+                'task' => is_array($state) && isset($state['current_task']) ? $state['current_task'] : null,
+                'offset' => is_array($state) && isset($state['offset']) ? $state['offset'] : null,
                 'trace' => $e->getTraceAsString()
             ], $config);
 
