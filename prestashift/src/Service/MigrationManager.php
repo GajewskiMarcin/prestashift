@@ -154,15 +154,16 @@ class MigrationManager
                     $config['db_user'] ?? '',
                     $config['db_pass'] ?? '',
                     $config['db_prefix'] ?? 'ps_',
-                    $config['source_url'] ?? ''
+                    ConnectorClient::shopUrl($config['source_url'] ?? '')
                 );
             } else {
                 $endpoint = $config['bridge_url'] ?? '';
 
-                // Derive endpoint from source_url if not explicitly provided
+                // Derive endpoint from source_url if not explicitly provided.
+                // shopUrl() tolerates the connector address being pasted into
+                // the shop address field.
                 if (empty($endpoint) && !empty($config['source_url'])) {
-                    $sourceUrl = rtrim($config['source_url'], '/');
-                    $endpoint = $sourceUrl . '/modules/psconnector/api.php';
+                    $endpoint = ConnectorClient::endpointUrl($config['source_url']);
                 }
 
                 $this->db_connection = new ConnectorClient($endpoint, $config['bridge_token'] ?? '');
@@ -383,7 +384,7 @@ class MigrationManager
 
             // 7b. Product Downloads (Virtual Products)
             case 'product_download':
-                $source_url = isset($config['source_url']) ? $config['source_url'] : '';
+                $source_url = ConnectorClient::shopUrl(isset($config['source_url']) ? $config['source_url'] : '');
                 $skip_files = isset($config['options']['skip_files']) && $config['options']['skip_files'];
                 $step = new Steps\ProductDownloadMigrationStep($conn, $prefix, $source_url, $skip_files);
                 $result = $step->process($offset, $limit, $lastDate);
@@ -451,7 +452,7 @@ class MigrationManager
 
             // 9. Manufacturers
             case 'manufacturers':
-                $source_url = isset($config['source_url']) ? $config['source_url'] : '';
+                $source_url = ConnectorClient::shopUrl(isset($config['source_url']) ? $config['source_url'] : '');
                 $skip_files = isset($config['options']['skip_files']) && $config['options']['skip_files'];
                 $step = new Steps\ManufacturerMigrationStep($conn, $prefix, $source_url, $skip_files);
                 $result = $step->process($offset, $limit, $lastDate);
@@ -531,7 +532,7 @@ class MigrationManager
             
             // 13. Attachments
             case 'attachments':
-                $source_url = isset($config['source_url']) ? $config['source_url'] : '';
+                $source_url = ConnectorClient::shopUrl(isset($config['source_url']) ? $config['source_url'] : '');
                 $skip_files = isset($config['options']['skip_files']) && $config['options']['skip_files'];
                 $step = new Steps\AttachmentMigrationStep($conn, $prefix, $source_url, $skip_files);
                 $result = $step->process($offset, $limit, $lastDate);
@@ -544,7 +545,7 @@ class MigrationManager
             
             // 14. CMS
             case 'cms':
-                $source_url = isset($config['source_url']) ? $config['source_url'] : '';
+                $source_url = ConnectorClient::shopUrl(isset($config['source_url']) ? $config['source_url'] : '');
                 $skip_files = isset($config['options']['skip_files']) && $config['options']['skip_files'];
                 $step = new Steps\CmsMigrationStep($conn, $prefix, $source_url, $skip_files);
                 $result = $step->process($offset, $limit, $lastDate);
@@ -575,7 +576,7 @@ class MigrationManager
                 if ($limit < 5) $limit = 5;
                 if ($limit > 100) $limit = 100;
                 
-                $source_url = isset($config['source_url']) ? $config['source_url'] : '';
+                $source_url = ConnectorClient::shopUrl(isset($config['source_url']) ? $config['source_url'] : '');
                 $skip_files = isset($config['options']['skip_files']) && $config['options']['skip_files'];
                 
                 $step = new Steps\ImageMigrationStep($conn, $prefix, $source_url, $skip_files);

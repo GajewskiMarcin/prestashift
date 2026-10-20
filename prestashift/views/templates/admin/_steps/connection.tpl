@@ -62,6 +62,7 @@
                     <i class="icon-globe"></i> {l s='Source Shop URL' mod='prestashift'}
                 </label>
                 <input type="url" name="source_url" class="ps-input" placeholder="https://myshop.com" required autocomplete="off">
+                <p class="ps-text-xs ps-text-slate-500" style="margin-top: 0.25rem;">{l s='The address of the old shop, for example https://myshop.com. The module adds the connector path itself.' mod='prestashift'}</p>
             </div>
 
             <div class="ps-space-y-2" style="margin-top: 1.5rem;">

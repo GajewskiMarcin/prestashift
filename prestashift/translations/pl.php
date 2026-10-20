@@ -404,7 +404,10 @@ $translations = array(
     'The shop returned a server error. The details are below and in your hosting error log.' => 'Sklep zwrócił błąd serwera. Szczegóły są poniżej oraz w logu błędów hostingu.',
     'The shop returned something else than the module expected — usually a PHP warning, a security plugin or a login page.' => 'Sklep zwrócił coś innego, niż moduł oczekiwał — zwykle ostrzeżenie PHP, wtyczkę bezpieczeństwa albo stronę logowania.',
     'Zones could not be loaded from the source shop.' => 'Nie udało się pobrać stref ze starego sklepu.',
-    'Order statuses could not be loaded from the source shop.' => 'Nie udało się pobrać statusów zamówień ze starego sklepu.'
+    'Order statuses could not be loaded from the source shop.' => 'Nie udało się pobrać statusów zamówień ze starego sklepu.',
+
+    // === 1.4.4 ===
+    'The address of the old shop, for example https://myshop.com. The module adds the connector path itself.' => 'Adres starego sklepu, na przykład https://twojsklep.pl. Ścieżkę do łącznika moduł dopisuje sam.'
 );
 
 // Map of Phrases to Contexts (Generated from Scan)

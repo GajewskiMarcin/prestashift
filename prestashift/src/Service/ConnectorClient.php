@@ -24,6 +24,32 @@ class ConnectorClient
     }
 
     /**
+     * The address of the source shop, whatever the operator pasted in.
+     *
+     * The wizard asks for the shop address and appends the connector path
+     * itself. People understandably paste the connector address they were told
+     * to open, which used to produce .../api.php/modules/psconnector/api.php
+     * and a request that never answers. Both forms are accepted now, and the
+     * cleaned address is also what the file downloads (logos, attachments,
+     * CMS images) are built from.
+     */
+    public static function shopUrl($url)
+    {
+        $url = trim((string) $url);
+        $url = preg_replace('#/modules/psconnector/api\.php/?$#i', '', $url);
+
+        return rtrim($url, '/');
+    }
+
+    /**
+     * Address of the connector endpoint on the source shop.
+     */
+    public static function endpointUrl($url)
+    {
+        return self::shopUrl($url) . '/modules/psconnector/api.php';
+    }
+
+    /**
      * Mocks PDO::query()
      */
     public function query($sql)

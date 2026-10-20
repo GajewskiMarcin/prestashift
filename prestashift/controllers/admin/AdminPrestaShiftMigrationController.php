@@ -225,10 +225,10 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                     'db_user' => Tools::getValue('db_user'),
                     'db_pass' => Tools::getValue('db_pass', ''),
                     'db_prefix' => Tools::getValue('db_prefix', 'ps_'),
-                    'source_url' => rtrim(Tools::getValue('source_url', ''), '/'),
+                    'source_url' => \PrestaShift\Service\ConnectorClient::shopUrl(Tools::getValue('source_url', '')),
                 ];
             } else {
-                $sourceUrl = rtrim(Tools::getValue('source_url'), '/');
+                $sourceUrl = \PrestaShift\Service\ConnectorClient::shopUrl(Tools::getValue('source_url'));
                 $config = [
                     'connection_method' => 'bridge',
                     'use_bridge' => 1,
@@ -387,7 +387,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $config = [
                 'connection_method' => $method,
                 'db_prefix' => Tools::getValue('db_prefix', 'ps_'),
-                'source_url' => rtrim(Tools::getValue('source_url', ''), '/'),
+                'source_url' => \PrestaShift\Service\ConnectorClient::shopUrl(Tools::getValue('source_url', '')),
             ];
             if ($method === 'direct') {
                 $config['db_host'] = Tools::getValue('db_host', 'localhost');
@@ -469,7 +469,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         $config = [
             'connection_method' => $method,
             'db_prefix' => Tools::getValue('db_prefix', 'ps_'),
-            'source_url' => rtrim(Tools::getValue('source_url', ''), '/'),
+            'source_url' => \PrestaShift\Service\ConnectorClient::shopUrl(Tools::getValue('source_url', '')),
             'scope' => Tools::getValue('scope', []),
             'options' => Tools::getValue('options', [])
         ];
@@ -785,7 +785,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         }
         
         return [
-            'source_url' => Tools::getValue('source_url'),
+            'source_url' => \PrestaShift\Service\ConnectorClient::shopUrl(Tools::getValue('source_url')),
             'options' => Tools::getValue('options', [])
         ];
     }
@@ -828,7 +828,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         try {
             $config = [
                 'bridge_token' => Tools::getValue('bridge_token'),
-                'source_url' => Tools::getValue('source_url'),
+                'source_url' => \PrestaShift\Service\ConnectorClient::shopUrl(Tools::getValue('source_url')),
                 'db_prefix' => Tools::getValue('db_prefix', 'ps_')
             ];
 
@@ -885,7 +885,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $config = [
                 'connection_method' => $method,
                 'db_prefix' => Tools::getValue('db_prefix', 'ps_'),
-                'source_url' => rtrim(Tools::getValue('source_url', ''), '/'),
+                'source_url' => \PrestaShift\Service\ConnectorClient::shopUrl(Tools::getValue('source_url', '')),
             ];
             if ($method === 'direct') {
                 $config['db_host'] = Tools::getValue('db_host', 'localhost');
