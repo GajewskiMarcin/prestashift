@@ -695,3 +695,42 @@ wątki 3 z 3 wiadomościami, załączniki 20.
 Przebieg na 2020 produktach, 4023 zdjęciach z prawdziwymi plikami i 200
 załącznikach, przez panel, z limitem 30 s: **813 partii, 510 s, zero błędów,
 najdłuższe żądanie 1,59 s.**
+
+---
+
+## A18. Tłumaczenia: brakujące frazy i ciche niedopasowanie kontekstów
+
+**Zadanie.** Dorobić tłumaczenia do fraz dodanych w 1.6.0 i 1.7.0.
+
+**Co się okazało po drodze.** Brakujące frazy były czterema, ale sprawdzanie „czy
+tekst jest w pliku" nie wystarcza. PrestaShop szuka tłumaczenia pod kluczem
+`md5(fraza)` poprzedzonym **kontekstem pliku, który o nie prosi**: nazwą
+szablonu dla `.tpl`, nazwą klasy dla PHP. Tłumaczenie zapisane pod innym
+kontekstem jest dla sklepu niewidoczne, a plik wygląda kompletnie.
+
+Znalezione tym kryterium:
+
+1. **Cztery frazy bez tłumaczenia** — dwa komunikaty o regułach przepisywania
+   adresów, ostrzeżenie o źródle multistore i podpowiedź adresu starego sklepu
+   (ta ostatnia z 1.4.4, nieprzetłumaczona w pięciu językach). Dopisane we
+   wszystkich sześciu.
+2. **Opis telemetrii z 1.5.0 nie tłumaczył się w pięciu językach.** Fraza
+   pochodzi z `options.tpl`, więc sklep szuka jej pod kontekstem `options`, a we
+   wspólnym `_contexts.php` wpisu nie było — klucz lądował pod kontekstem
+   kontrolera. Polski plik miał własną mapę z poprawnym wpisem, więc po polsku
+   działało, co ukrywało problem.
+3. **Siedem fraz używanych z dwóch miejsc** (np. „Customers" w kontrolerze i w
+   szablonie zakresu, „Migration fully completed!" w menedżerze migracji) miało w
+   mapie tylko jeden kontekst, więc z drugiego miejsca sklep pokazywał
+   angielski. Dotyczyło **wszystkich sześciu języków**, czyli 42 wystąpień.
+
+**Działanie.** `_contexts.php` jest teraz generowany z kodu: każda fraza ma
+wszystkie konteksty, z których jest używana (345 fraz). Polski plik przestał
+trzymać własną kopię mapy i korzysta ze wspólnej — to ta podwójna mapa
+spowodowała rozjechanie się jednego pliku z pozostałymi.
+
+**Weryfikacja.** Dwa testy. Pierwszy liczy frazy, których sklep nie znajdzie,
+budując klucze dokładnie tak jak PrestaShop: **0 w każdym z sześciu języków**
+(wcześniej 42). Drugi pyta o tłumaczenia **żywy sklep** przez
+`Translate::getModuleTranslation()` z językiem ustawionym na polski — wszystkie
+sprawdzone frazy wracają po polsku, w tym jedna z kontekstu szablonu.

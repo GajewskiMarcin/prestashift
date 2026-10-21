@@ -351,7 +351,11 @@ $translations = array(
     'The shop returned a server error. The details are below and in your hosting error log.' => 'La boutique a renvoyé une erreur serveur. Les détails sont ci-dessous et dans le journal d\'erreurs de votre hébergement.',
     'The shop returned something else than the module expected — usually a PHP warning, a security plugin or a login page.' => 'La boutique a renvoyé autre chose que ce que le module attendait — généralement un avertissement PHP, un plugin de sécurité ou une page de connexion.',
     'Zones could not be loaded from the source shop.' => 'Les zones n\'ont pas pu être chargées depuis la boutique source.',
-    'Order statuses could not be loaded from the source shop.' => 'Les statuts de commande n\'ont pas pu être chargés depuis la boutique source.'
+    'Order statuses could not be loaded from the source shop.' => 'Les statuts de commande n\'ont pas pu être chargés depuis la boutique source.',
+    'Rewrite rules regenerated for friendly URLs' => 'Règles de réécriture régénérées pour les URL simplifiées',
+    'Rewrite rules regeneration failed — turn friendly URLs off and on again in Shop Parameters > Traffic & SEO' => 'La régénération des règles de réécriture a échoué — désactivez puis réactivez les URL simplifiées dans Paramètres de la boutique > Trafic & SEO',
+    'The address of the old shop, for example https://myshop.com. The module adds the connector path itself.' => 'L\'adresse de l\'ancienne boutique, par exemple https://maboutique.com. Le module ajoute lui-même le chemin du connecteur.',
+    'The source is a multistore installation with %1$d shops. Only the data of shop "%2$s" (id %3$d) will be migrated — the other shops are ignored.' => 'La boutique source est une installation multiboutique avec %1$d boutiques. Seules les données de la boutique « %2$s » (id %3$d) seront migrées — les autres boutiques sont ignorées.',
 );
 
 // Contexts shared by every language file

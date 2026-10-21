@@ -351,7 +351,11 @@ $translations = array(
     'The shop returned a server error. The details are below and in your hosting error log.' => 'A loja devolveu um erro de servidor. Os detalhes estão abaixo e no registo de erros do seu alojamento.',
     'The shop returned something else than the module expected — usually a PHP warning, a security plugin or a login page.' => 'A loja devolveu algo diferente do que o módulo esperava — normalmente um aviso do PHP, um plugin de segurança ou uma página de início de sessão.',
     'Zones could not be loaded from the source shop.' => 'Não foi possível carregar as zonas a partir da loja de origem.',
-    'Order statuses could not be loaded from the source shop.' => 'Não foi possível carregar os estados de encomenda a partir da loja de origem.'
+    'Order statuses could not be loaded from the source shop.' => 'Não foi possível carregar os estados de encomenda a partir da loja de origem.',
+    'Rewrite rules regenerated for friendly URLs' => 'Regras de reescrita regeradas para os URL amigáveis',
+    'Rewrite rules regeneration failed — turn friendly URLs off and on again in Shop Parameters > Traffic & SEO' => 'Não foi possível regenerar as regras de reescrita — desactive e volte a activar os URL amigáveis em Parâmetros da loja > Tráfego e SEO',
+    'The address of the old shop, for example https://myshop.com. The module adds the connector path itself.' => 'O endereço da loja antiga, por exemplo https://aminhaloja.com. O módulo acrescenta o caminho do conector por si.',
+    'The source is a multistore installation with %1$d shops. Only the data of shop "%2$s" (id %3$d) will be migrated — the other shops are ignored.' => 'A loja de origem é uma instalação multiloja com %1$d lojas. Apenas os dados da loja «%2$s» (id %3$d) serão migrados — as restantes lojas são ignoradas.',
 );
 
 // Contexts shared by every language file
