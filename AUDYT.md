@@ -554,3 +554,74 @@ błąd w dzienniku.
 
 Oba błędy były moje i oba znalazły się tylko dlatego, że test porównywał liczby
 wierszy w bazie, a nie treść komunikatu modułu.
+
+---
+
+## A16. Załączniki zapisywane jako strona błędu 403
+
+**Jak wyszło.** Przebieg z włączonym przenoszeniem plików (4023 zdjęcia i 200
+załączników). Zdjęcia przeszły poprawnie — sumy kontrolne plików w celu zgodne ze
+źródłem. Załączniki nie: plik w celu miał **277 bajtów** zamiast 647, a w środku
+leżała strona `<title>403 Forbidden</title>` od Apache.
+
+**Przyczyna.** `AttachmentMigrationStep::downloadFile()` pobierał plik zwykłym
+żądaniem HTTP z `http://sklep/download/<hash>`, a PrestaShop chroni katalog
+`download/` własnym `.htaccess`. Odpowiedzią jest więc strona 403, którą moduł
+zapisywał na dysk bez jakiegokolwiek sprawdzenia i bez słowa w dzienniku.
+Konektor ma akcję plikową z dostępem do `download/` — czyli jedyna droga, która
+działa, nie była używana.
+
+**Działanie.**
+
+1. Przy połączeniu przez konektor plik jest pobierany przez konektor.
+2. Pobrana treść jest sprawdzana względem `file_size` z tabeli załącznika;
+   cokolwiek innej długości nie jest zapisywane, a w dzienniku pojawia się
+   ostrzeżenie mówiące, co zrobić.
+3. Przy połączeniu bezpośrednim do bazy plik pozostaje nieosiągalny (katalog jest
+   zablokowany), więc moduł mówi to wprost: skopiuj katalog `download/` ręcznie
+   albo migruj przez konektor.
+4. Plik już istniejący w celu, ale o złym rozmiarze, jest pobierany ponownie —
+   dzięki temu sklep, który ma u siebie te 277-bajtowe śmieci po wcześniejszej
+   migracji, naprawia się sam przy następnym przebiegu. Sprawdzone: pliki
+   wróciły do 647 bajtów i zgadzają się sumami kontrolnymi ze źródłem.
+5. Zdjęcia dostały analogiczne sprawdzenie: treść musi być obrazem
+   (`getimagesizefromstring`), bo strona błędu zapisana jako `<id>.jpg` to
+   zepsute zdjęcie i cisza w dzienniku.
+
+---
+
+## Macierz opcji (mały sklep, 2026-10-22)
+
+Źródło: 1.7.8.9, 20 produktów, 9 kategorii, 39 kombinacji, 23 zdjęcia z
+plikami, 20 załączników z plikami, 3 klienci, 7 adresów, 5 zamówień, 5 koszyków,
+3 kupony, 6 przewoźników, 5 stron CMS, 40 stron meta, 2 kontakty, 5 sklepów
+stacjonarnych, 2 pracownicy. Każdy przypadek to pełny przebieg przez panel.
+
+| przypadek | co sprawdza | partii | czas | błędy |
+|---|---|---|---|---|
+| konektor, czyszczenie, pliki | podstawowa droga | 74 | 23,4 s | 0 |
+| „pomiń pliki" | opcja skip_files | 74 | 28,5 s | 0 |
+| połączenie bezpośrednie do bazy | tryb direct | 74 | 11,8 s | 0 |
+| drugi przebieg bez czyszczenia | brak duplikatów | 74 | 25,8 s | 0 |
+| tryb przyrostowy (delta) | filtr daty | 63 | 21,8 s | 0 |
+| partia 1 rekordu | skrajna wartość | 77 | 26,8 s | 0 |
+| partia 500 rekordów | skrajna wartość | 72 | 27,9 s | 0 |
+| zakres: tylko klienci | pojedynczy zakres | 6 | 1,7 s | 0 |
+| zakres: zamówienia | pojedynczy zakres | 15 | 5,3 s | 0 |
+| zakres: CMS i meta | pojedynczy zakres | 4 | 1,2 s | 0 |
+| zakres: przewoźnicy i strefy | pojedynczy zakres | 5 | 1,8 s | 0 |
+| raportowanie błędów włączone | telemetria | 74 | 26,4 s | 0 |
+| tryb debugowania wyłączony | bez dziennika | 74 | 27,5 s | 0 |
+| opóźnienie między partiami | delay 100 ms | 74 | 40,8 s | 0 |
+
+Sprawdzenia poza „zero błędów":
+
+- **pliki**: sumy kontrolne 20 załączników i zdjęć w celu zgodne ze źródłem,
+  zdjęcia w celu są prawidłowymi obrazami;
+- **multistore** (cel z dwoma sklepami, PrestaShop 9.0): migracja do sklepu 1,
+  potem do sklepu 2 bez czyszczenia. Produkty współdzielone (20 globalnie, nie
+  40), `product_shop` po 20 wierszy na każdy sklep, `category_shop` po 9,
+  `stock_available` dla sklepu 2 obecne, **sklep 1 nietknięty** — czyli
+  zachowanie zgodne z multistore PrestaShop;
+- **tryb bezpośredni** wykrył błąd `meta` (duplikat strony `cart`), który
+  pochodził z mojej zbyt szerokiej adopcji numerów z A14 i został naprawiony.

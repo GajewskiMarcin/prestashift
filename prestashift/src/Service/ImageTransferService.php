@@ -45,6 +45,16 @@ class ImageTransferService
             return false;
         }
 
+        // What comes back has to be an image. A web server that answers 403
+        // or 404 answers with an HTML page, and writing that page as <id>.jpg
+        // leaves the shop with a broken image and no complaint anywhere.
+        if (@getimagesizefromstring($content) === false) {
+            LogService::getInstance()->warning("Image $sourceImageId was not an image when fetched from the source"
+                . ' shop (' . strlen($content) . ' bytes, probably an error page) — not saved.');
+
+            return false;
+        }
+
         $imagePath = $folder . $targetImageId . '.jpg';
         if (!file_put_contents($imagePath, $content)) {
             return false;

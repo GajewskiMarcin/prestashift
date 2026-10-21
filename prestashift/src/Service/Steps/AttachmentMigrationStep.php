@@ -12,7 +12,9 @@ namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\ConnectorClient;
 use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LogService;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
 use PrestaShift\Service\SourceBatch;
@@ -95,20 +97,67 @@ class AttachmentMigrationStep
 
         // Files are stored under their hash, not their id
         if ($this->source_url && !$this->skip_files) {
-            $this->downloadFile($data['file']);
+            $this->downloadFile($data['file'], isset($data['file_size']) ? (int) $data['file_size'] : 0);
         }
     }
 
-    private function downloadFile($fileHash)
+    /**
+     * Fetches one attachment file.
+     *
+     * PrestaShop protects the download/ directory with its own .htaccess, so
+     * asking for the file over plain HTTP comes back as the web server's
+     * "403 Forbidden" page. This method used to write whatever came back
+     * straight to disk, which is how a shop ended up with 277-byte HTML error
+     * pages in place of its attachments — and nothing said a word about it.
+     *
+     * Through the connector the file is read from the source shop's disk, which
+     * is the only way that works, so that is the path taken whenever the
+     * migration runs on the bridge. The size recorded in the attachment row is
+     * checked afterwards: anything of a different length is refused rather than
+     * saved over the file.
+     */
+    private function downloadFile($fileHash, $expectedSize = 0)
     {
         $targetPath = constant('_PS_DOWNLOAD_DIR_') . $fileHash;
-        if (file_exists($targetPath)) {
+        // A file that is already there and the right size needs no fetching.
+        // One of the wrong size does: that is how a shop repairs itself after a
+        // run that saved a 403 page over its attachments, which "skip whatever
+        // exists" would have left broken for good.
+        if (file_exists($targetPath)
+            && ($expectedSize <= 0 || (int) filesize($targetPath) === $expectedSize)) {
             return;
         }
 
-        $content = @Tools::file_get_contents(rtrim($this->source_url, '/') . '/download/' . $fileHash);
-        if ($content) {
-            file_put_contents($targetPath, $content);
+        $log = LogService::getInstance();
+        $content = false;
+
+        if ($this->db_connection instanceof ConnectorClient) {
+            $content = $this->db_connection->getFile('download/' . $fileHash);
+        } elseif ($this->source_url) {
+            $content = @Tools::file_get_contents(rtrim($this->source_url, '/') . '/download/' . $fileHash);
+        }
+
+        if ($content === false || $content === '' || $content === null) {
+            $log->warning("Attachment file $fileHash could not be fetched from the source shop."
+                . ' With a direct database connection the file cannot be read at all, because PrestaShop blocks'
+                . ' the download/ directory: copy that folder to the new shop by hand, or migrate over the'
+                . ' connector.');
+
+            return;
+        }
+
+        if ($expectedSize > 0 && strlen($content) !== $expectedSize) {
+            $log->warning("Attachment file $fileHash came back with " . strlen($content) . ' bytes instead of '
+                . $expectedSize . ' — not saved, because that is an error page or a truncated file, not the'
+                . ' attachment. The attachment itself is migrated; copy the file by hand or migrate over the'
+                . ' connector.');
+
+            return;
+        }
+
+        if (!file_put_contents($targetPath, $content)) {
+            $log->warning("Attachment file $fileHash could not be written to " . constant('_PS_DOWNLOAD_DIR_')
+                . ' — check the directory permissions.');
         }
     }
 }

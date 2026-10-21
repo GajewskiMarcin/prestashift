@@ -437,6 +437,18 @@ class IdMapper
             if (in_array($entity, self::$dictionaries, true)) {
                 continue;
             }
+            // Only records a migration numbers are adopted. Everything with a
+            // natural key of its own — meta pages, countries, currencies,
+            // states, customer groups, employee profiles, taxes, tags — belongs
+            // to the target shop and is matched by that key, not by its number.
+            // Adopting those was wrong and it showed: meta id 15 of the source
+            // was mapped onto meta id 15 of the target, which is a different
+            // page there, and the migration died on a duplicate "cart" page.
+            // Categories are adopted even though they have a matcher, because
+            // that matcher only recognises the shop's root and home category.
+            if (self::hasMatcher($entity) && $entity !== 'category') {
+                continue;
+            }
             $count = self::adoptEntity($entity);
             if ($count > 0) {
                 $adopted[$entity] = $count;
@@ -529,10 +541,15 @@ class IdMapper
             return 0;
         }
 
+        $skip = [];
+        foreach (self::systemTargetIds($entity) as $systemId) {
+            $skip[(int) $systemId] = true;
+        }
+
         $values = [];
         foreach ($sourceIds as $sourceId) {
             $id = (int) $sourceId;
-            if ($id > 0 && isset($targetIds[$id])) {
+            if ($id > 0 && isset($targetIds[$id]) && !isset($skip[$id])) {
                 $values[] = "('" . pSQL(self::$source) . "', '" . pSQL($entity) . "', $id, $id, 0)";
             }
         }
