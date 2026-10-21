@@ -22,6 +22,9 @@ class TagMigrationStep
     private $db_connection;
     private $prefix;
 
+    /** @var array product-tag links of the batch, written in one statement */
+    private $links = [];
+
     /** @var array source id_tag => product link rows, read once per batch */
     private $productRows = [];
 
@@ -44,9 +47,21 @@ class TagMigrationStep
             "SELECT id_tag, id_product FROM `{$this->prefix}product_tag` WHERE id_tag IN ({ids})",
             'id_tag', array_column($items, 'id_tag'));
 
+        // The products those links point at, resolved in one bulk query instead
+        // of one lookup per link.
+        $products = [];
+        foreach ($this->productRows as $rows) {
+            foreach ($rows as $row) {
+                $products[] = (int)$row['id_product'];
+            }
+        }
+        IdMapper::prepare('product', $products);
+
+        $this->links = [];
         foreach ($items as $item) {
             $this->importTag($item);
         }
+        $this->writeLinks();
 
         return ['count' => count($items), 'finished' => false];
     }
@@ -90,8 +105,29 @@ class TagMigrationStep
         foreach ($rows as $row) {
             $idProduct = IdMapper::ref('product', (int)$row['id_product']);
             if ($idProduct > 0) {
-                SchemaHelper::insertIgnore('product_tag', ['id_product' => $idProduct, 'id_tag' => $tid, 'id_lang' => $lang]);
+                $this->links["$idProduct:$tid:$lang"] = "($idProduct, $tid, $lang)";
             }
         }
+    }
+
+    /**
+     * One statement for every product-tag link of the batch.
+     *
+     * A row at a time meant five hundred INSERTs per batch of fifty tags, which
+     * measured 5 to 6 seconds against 0.3 seconds for the feature links, which
+     * were already written this way — and one batch took 28 seconds, close
+     * enough to a 30 second request limit to kill a migration on a slower
+     * server.
+     */
+    private function writeLinks()
+    {
+        if (empty($this->links)) {
+            return;
+        }
+        foreach (array_chunk(array_values($this->links), 500) as $chunk) {
+            Db::getInstance()->execute('INSERT IGNORE INTO `' . _DB_PREFIX_ . 'product_tag`
+                (id_product, id_tag, id_lang) VALUES ' . implode(',', $chunk));
+        }
+        $this->links = [];
     }
 }

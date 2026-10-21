@@ -50,15 +50,18 @@ class ImageTransferService
             return false;
         }
 
-        // Thumbnails (required for the back office to show the image)
-        foreach (\ImageType::getImagesTypes('products') as $imageType) {
-            \ImageManager::resize(
-                $imagePath,
-                $folder . $targetImageId . '-' . stripslashes($imageType['name']) . '.jpg',
-                (int)$imageType['width'],
-                (int)$imageType['height']
-            );
-        }
+        // Only the original is written. PrestaShop builds the thumbnails itself
+        // the first time each one is needed: the front office does it in
+        // ImageRetriever::checkOrGenerateImageType() (same code in 1.7.8, 8.2
+        // and 9.1), and the back office in ImageManager::thumbnail(), which
+        // resizes from the original into img/tmp. Generating every image type
+        // here instead meant five resize operations per image — half a million
+        // of them on a shop with 100 000 images — while the shopkeeper waits,
+        // for files the shop would have produced on demand anyway.
+        //
+        // A shopkeeper who wants them all ready up front has the tools for it:
+        // "Regenerate thumbnails" in the back office, or, from 9.1,
+        // `php bin/console prestashop:thumbnails:regenerate products`.
 
         return true;
     }

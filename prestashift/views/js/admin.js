@@ -707,13 +707,8 @@ var PrestaShift = {
                         var nextPayload = { ajax: true, action: 'run_batch', state: JSON.stringify(response.state) };
 
                         if (PrestaShift.isPaused) {
-                            PrestaShift.pendingNextBatch = nextPayload;
                             PrestaShift.log(PrestaShift.t('migration_paused'));
-                            $('#btn-pause-migration')
-                                .html('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play" style="margin-right: 8px;"><polygon points="5 3 19 12 5 21 5 3"/></svg> Resume Migration')
-                                .removeClass('ps-opacity-50')
-                                .prop('disabled', false);
-                            $('#finish-later-area').css('visibility', 'visible');
+                            PrestaShift.pauseForResume(nextPayload);
                         } else {
                             // Wait the configured delay before firing the next batch.
                             // Back-to-back requests to the same admin URL trip hosting
@@ -741,6 +736,12 @@ var PrestaShift = {
                         }, 45000);
                     } else {
                         PrestaShift.logError(PrestaShift.t('error_prefix') + response.message);
+                        // Until now any error other than a rate limit simply
+                        // stopped the migration: no Resume, so the only way on
+                        // was to start again from the beginning. The batch that
+                        // failed is kept instead, to be retried once whatever
+                        // caused it has been dealt with.
+                        PrestaShift.pauseForResume(data);
                     }
                 }
             },
@@ -759,17 +760,29 @@ var PrestaShift = {
                     detail = 'HTTP ' + jqXHR.status + (detail ? ' — ' + detail : '');
                 }
                 PrestaShift.logError(PrestaShift.t('network_error') + (detail ? ' [' + detail + ']' : ''));
-                PrestaShift.isPaused = true;
-                PrestaShift.pendingNextBatch = ajaxData;
-
-                $('#btn-pause-migration')
-                    .html('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play" style="margin-right: 8px;"><polygon points="5 3 19 12 5 21 5 3"/></svg> Resume Migration')
-                    .removeClass('ps-opacity-50')
-                    .prop('disabled', false)
-                    .show();
-                $('#finish-later-area').css('visibility', 'visible');
+                PrestaShift.pauseForResume(ajaxData);
             }
         });
+    },
+
+    /**
+     * Parks the migration on a batch that still has to run, and turns the pause
+     * button into Resume. A batch that failed is not a failed migration: the
+     * cause is usually the source server needing a smaller batch, a longer
+     * delay or simply a breather, and every write is idempotent, so running the
+     * same batch again continues from exactly where it stopped instead of
+     * starting the whole migration from zero.
+     */
+    pauseForResume: function (payload) {
+        this.isPaused = true;
+        this.pendingNextBatch = payload;
+
+        $('#btn-pause-migration')
+            .html('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play" style="margin-right: 8px;"><polygon points="5 3 19 12 5 21 5 3"/></svg> Resume Migration')
+            .removeClass('ps-opacity-50')
+            .prop('disabled', false)
+            .show();
+        $('#finish-later-area').css('visibility', 'visible');
     },
 
     log: function (msg) {

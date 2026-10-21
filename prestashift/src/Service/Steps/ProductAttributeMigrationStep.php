@@ -14,6 +14,7 @@ use Db;
 use PDO;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\StockWriter;
 use PrestaShift\Service\SourceBatch;
 
 class ProductAttributeMigrationStep
@@ -48,6 +49,9 @@ class ProductAttributeMigrationStep
         foreach ($rows as $row) {
             $this->importItem($row);
         }
+
+        // The stock of the whole batch in one statement
+        StockWriter::flush();
 
         return ['count' => count($rows), 'finished' => false];
     }
@@ -137,7 +141,7 @@ class ProductAttributeMigrationStep
         $stock = SourceBatch::of($this->stockRows, $sid);
         $qty = isset($stock[0]['quantity']) ? (int)$stock[0]['quantity'] : 0;
 
-        \StockAvailable::setQuantity($tidProduct, $tid, $qty);
+        StockWriter::set($tidProduct, $tid, $qty);
     }
 
     private function importImages($sid, $tid)

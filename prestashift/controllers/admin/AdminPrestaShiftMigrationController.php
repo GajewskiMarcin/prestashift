@@ -666,13 +666,14 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $tasks[] = ['label' => $this->module->l('Orphaned combinations cleanup failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
         }
 
-        // 7. Refresh product indexing flags
-        try {
-            \Db::getInstance()->execute("UPDATE `" . _DB_PREFIX_ . "product` SET `indexed` = 1");
-            $tasks[] = ['label' => $this->module->l('Product index flags updated', 'AdminPrestaShiftMigrationController'), 'ok' => true];
-        } catch (\Throwable $e) {
-            $tasks[] = ['label' => $this->module->l('Product index update failed', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
-        }
+        // 7. The search index flags are left as the indexer found them.
+        //
+        // This step used to mark every product as indexed, which told the shop
+        // a lie: with a catalog over the inline threshold nothing had been
+        // indexed at all, and "Add missing products to the index" — the very
+        // button PrestaShop's migration guide points at — then had no work to
+        // do, so the front-office search stayed empty. Search::indexation()
+        // sets the flag itself for the products it indexes.
         } // end catalog-only maintenance
 
         // 6. Collect final report stats from target DB
@@ -696,6 +697,27 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         }
 
         // 7. Generate redirect map
+        // Friendly URLs: the setting alone is not enough.
+        //
+        // PrestaShop writes the rewrite rules into .htaccess when the setting
+        // changes — Meta::update() and Meta::delete() end with
+        // Tools::generateHtaccess(), and that method reads PS_REWRITING_SETTINGS
+        // to decide what to write. This module writes the setting with
+        // Configuration::updateValue() and the meta rows with SQL, so nothing
+        // regenerated the file: a shop whose old site had friendly URLs on, and
+        // whose new one had them off, ended up with the setting on and no rules
+        // in .htaccess, which means 404 on every product and category page.
+        if (!empty($scope['configuration'])) {
+            try {
+                if (\Configuration::get('PS_REWRITING_SETTINGS')) {
+                    \Tools::generateHtaccess();
+                    $tasks[] = ['label' => $this->module->l('Rewrite rules regenerated for friendly URLs', 'AdminPrestaShiftMigrationController'), 'ok' => true];
+                }
+            } catch (\Throwable $e) {
+                $tasks[] = ['label' => $this->module->l('Rewrite rules regeneration failed — turn friendly URLs off and on again in Shop Parameters > Traffic & SEO', 'AdminPrestaShiftMigrationController'), 'ok' => false, 'error' => $e->getMessage()];
+            }
+        }
+
         $redirectFile = null;
         try {
             $savedState = (new \PrestaShift\Service\MigrationManager())->getSavedState();
@@ -759,6 +781,17 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $response = $manager->processBatch($state);
             
         } catch (Throwable $e) {
+            // The batch runs inside one transaction (see
+            // MigrationManager::processBatch). Undo it, so a batch that failed
+            // halfway leaves nothing behind and Resume can run it again from a
+            // whole state. MySQL would discard it when the connection closes
+            // anyway; doing it here means the rest of this request, telemetry
+            // included, no longer sits inside a dead transaction.
+            try {
+                \Db::getInstance()->execute('ROLLBACK');
+            } catch (Throwable $ignored) {
+            }
+
             // TELEMETRY: If user agreed, send the error report
             $config = $this->getMigrationConfig($state);
             $telemetry = new \PrestaShift\Service\TelemetryService();

@@ -201,6 +201,16 @@ class CleanupService
         foreach ((array) $rows as $row) {
             $ids[] = (int) $row['id_carrier'];
         }
+
+        // Carriers an earlier migration created here. A shipping module carrier
+        // of the source arrives with is_module set, so the rule above spared it
+        // and the next run migrated it again: the carrier list grew by one copy
+        // with every repeated migration. What this module wrote, it removes.
+        foreach (IdMapper::targetIds('carrier') as $id) {
+            $ids[] = $id;
+        }
+
+        $ids = array_values(array_unique(array_filter($ids)));
         if (empty($ids)) {
             return;
         }

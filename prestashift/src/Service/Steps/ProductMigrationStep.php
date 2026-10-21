@@ -15,6 +15,7 @@ use PDO;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\StockWriter;
 use PrestaShift\Service\SourceBatch;
 
 class ProductMigrationStep
@@ -60,6 +61,9 @@ class ProductMigrationStep
         foreach ($products as $product) {
             $this->importProduct($product);
         }
+
+        // The stock of the whole batch in one statement
+        StockWriter::flush();
 
         return ['count' => count($products), 'finished' => false];
     }
@@ -165,7 +169,12 @@ class ProductMigrationStep
             'show_condition' => $data['show_condition'],
             'condition' => $data['condition'],
             'show_price' => $data['show_price'],
-            'indexed' => 1,
+            // A migrated product is not in the search index yet. PrestaShop's
+            // own migration guide tells the shopkeeper to run "Add missing
+            // products to the index", and "missing" means indexed = 0, so
+            // claiming 1 here would make that button find nothing to do and
+            // leave the shop with a search that returns no results.
+            'indexed' => 0,
             'visibility' => $data['visibility'],
             'is_virtual' => $data['is_virtual'],
             'cache_is_pack' => isset($data['cache_is_pack']) ? $data['cache_is_pack'] : 0,
@@ -298,7 +307,7 @@ class ProductMigrationStep
             'show_condition' => (int)$p['show_condition'],
             'condition' => $p['condition'],
             'show_price' => (int)$p['show_price'],
-            'indexed' => 1,
+            'indexed' => 0, // see importProduct(): the index is built afterwards
             'visibility' => $p['visibility'],
             'cache_default_attribute' => (int)$p['cache_default_attribute'],
             'advanced_stock_management' => (int)$p['advanced_stock_management'],
@@ -316,11 +325,10 @@ class ProductMigrationStep
 
         $qty = isset($row[0]['quantity']) ? (int)$row[0]['quantity'] : 0;
 
-        \StockAvailable::setQuantity($tid, 0, $qty);
-
-        // Force out_of_stock=2 (use global setting) — safer than copying
-        // per-product overrides from source which may be stale or incorrect
-        \StockAvailable::setProductOutOfStock($tid, 2);
+        // Written with the rest of the batch. out_of_stock stays 2 (use the
+        // shop's global setting) — safer than copying per-product overrides
+        // from the source, which may be stale or wrong.
+        StockWriter::set($tid, 0, $qty);
     }
 
     private function importCategoryLink($sid, $tid, $defaultCategory)

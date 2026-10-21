@@ -394,6 +394,30 @@ class IdMapper
      * pointed at are gone. The next allocation starts again from offset 0,
      * which yields 1:1 ids.
      */
+    /**
+     * Target ids this module wrote for an entity, excluding records it only
+     * linked to (those belong to the target shop and must never be deleted).
+     * Cleaning uses it to remove exactly what previous migrations created.
+     */
+    public static function targetIds($entity)
+    {
+        $ids = [];
+        try {
+            $rows = Db::getInstance()->executeS('SELECT `target_id` FROM `' . _DB_PREFIX_ . self::MAP_TABLE . "`
+                WHERE `entity` = '" . pSQL($entity) . "' AND `linked` = 0");
+        } catch (\Exception $e) {
+            return $ids;
+        }
+        foreach ((array) $rows as $row) {
+            $id = (int) $row['target_id'];
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+
+        return array_values($ids);
+    }
+
     public static function forget(array $entities)
     {
         if (empty($entities)) {

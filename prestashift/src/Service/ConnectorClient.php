@@ -23,6 +23,9 @@ class ConnectorClient
     /** @var int how many requests have been sent to the source shop */
     private static $requestCount = 0;
 
+    /** @var float seconds spent waiting for the source shop to answer */
+    private static $requestTime = 0.0;
+
     /**
      * Requests sent to the source shop so far. Every one of them is a round trip
      * over the internet, so this is the number that decides whether a slow source
@@ -31,6 +34,16 @@ class ConnectorClient
     public static function requestCount()
     {
         return self::$requestCount;
+    }
+
+    /**
+     * Seconds spent waiting for the source shop. Together with requestCount() it
+     * separates a slow source from a slow target: if a batch takes 20 seconds and
+     * 2 of them were spent waiting, the time went on writing, not on the network.
+     */
+    public static function requestTime()
+    {
+        return self::$requestTime;
     }
 
     /**
@@ -144,9 +157,14 @@ class ConnectorClient
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 
-            $response = curl_exec($ch);
+            $started = microtime(true);
+            $started = microtime(true);
+        $response = curl_exec($ch);
+        self::$requestTime += microtime(true) - $started;
+            self::$requestTime += microtime(true) - $started;
             $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $curlError = curl_errno($ch) ? curl_error($ch) : '';
+            $curlErrno = curl_errno($ch);
+            $curlError = $curlErrno ? curl_error($ch) : '';
             self::$lastRequest = [
                 'action' => $action,
                 'http_code' => $httpCode,
@@ -160,20 +178,30 @@ class ConnectorClient
             curl_close($ch);
 
             // The request never completed: DNS, TLS, a timeout, or the source
-            // server dropping the connection. That usually succeeds on a second
-            // try, so retry before giving up — and say what actually happened
-            // instead of blaming the URL.
+            // server dropping the connection. A refused or dropped connection
+            // usually works on the next try, so those are retried in full.
+            //
+            // A request that connected and then stayed silent for the whole
+            // timeout is different: the source shop is saturated, not blinking.
+            // Asking it three more times only adds load to a server already on
+            // its knees and leaves the user watching a frozen progress bar for
+            // two minutes, so a timeout gets one retry instead of three.
             if ($response === false || $curlError !== '' || $httpCode === 0) {
-                if ($retryIn !== null) {
-                    sleep($retryIn);
+                $timedOut = $curlErrno === (defined('CURLE_OPERATION_TIMEDOUT') ? CURLE_OPERATION_TIMEDOUT : 28);
+                $allowed = $timedOut ? 1 : count($backoff);
+                if ($attempt < $allowed) {
+                    sleep(isset($backoff[$attempt]) ? $backoff[$attempt] : 2);
                     ++$attempt;
                     continue;
                 }
                 throw new Exception('Connector Error: no answer from the source shop at ' . $this->url
                     . ($curlError !== '' ? ' (' . $curlError . ')' : '')
+                    . '. Tried ' . ($attempt + 1) . ' time' . ($attempt ? 's' : '')
                     . '. The connection was refused, timed out or was dropped. Check that the address is reachable;'
                     . ' if it only fails during a migration, the source server is cutting the connection under load:'
-                    . " lower 'Batch Size' and 'Image Batch Size' and raise 'Request Delay' in the Options step.");
+                    . " lower 'Batch Size' and 'Image Batch Size' and raise 'Request Delay' in the Options step,"
+                    . ' then click Resume. If both shops are on the same server, the Direct Database connection'
+                    . ' makes no HTTP requests at all and avoids this entirely.');
             }
 
             if ($httpCode === 403) {

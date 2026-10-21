@@ -135,7 +135,11 @@ class TelemetryService
             . ', attempt ' . $r['attempt']
             . ', DNS ' . $r['dns_lookup_s'] . 's, connect ' . $r['connect_s'] . 's, total ' . $r['total_s'] . 's'
             . ', received ' . $r['bytes_received'] . ' bytes'
-            . ($r['error'] !== '' ? ', error: ' . $r['error'] : '');
+            . ($r['error'] !== '' ? ', error: ' . $r['error'] : '')
+            // Requests and waiting time of this one batch: they separate a slow
+            // source shop from a slow target.
+            . "\n" . 'this batch: ' . ConnectorClient::requestCount() . ' request(s) to the source, '
+            . round(ConnectorClient::requestTime(), 2) . 's spent waiting for them';
     }
 
     /**

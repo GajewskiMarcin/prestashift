@@ -5,7 +5,7 @@
  * @author    marcingajewski.pl <kontakt@marcingajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.2.0
+ * @version   1.3.0
  */
 
 // Prevent PrestaShop from redirecting based on domain mismatch
@@ -40,7 +40,7 @@ try {
         header('Content-Type: application/json');
         echo json_encode([
             'success' => true,
-            'version' => '1.2.0',
+            'version' => '1.3.0',
             'ps_version' => _PS_VERSION_,
             'php_version' => PHP_VERSION,
             'prefix' => _DB_PREFIX_,
@@ -72,13 +72,37 @@ try {
             throw new Exception("Empty SQL query.");
         }
 
-        // Security: block write operations — connector is READ-ONLY
-        $sqlUpper = strtoupper(trim($sql));
-        $blocked = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'TRUNCATE', 'CREATE', 'REPLACE', 'RENAME', 'GRANT', 'REVOKE'];
-        foreach ($blocked as $keyword) {
-            if (strpos($sqlUpper, $keyword) === 0) {
-                throw new Exception("Write operations are not allowed. Connector is read-only.");
-            }
+        // Security: this endpoint reads the shop, and nothing else.
+        //
+        // The rule used to be a list of forbidden first words (INSERT, UPDATE,
+        // DELETE…), which let through everything that merely starts with
+        // SELECT. That is not a small gap: with the MySQL FILE privilege, which
+        // plenty of shared hosts hand out, "SELECT … INTO OUTFILE" writes a
+        // file anywhere the database user can write — a PHP file in the shop's
+        // own directory included — and LOAD_FILE() reads one back. SLEEP() and
+        // BENCHMARK() tie up a PHP worker for as long as they please. A leaked
+        // token was therefore worth far more than read access.
+        //
+        // So: one statement, it must be a SELECT, and the handful of SELECT
+        // constructs that touch files, locks or the clock are refused.
+        $candidate = ltrim($sql);
+        // Comments first, so /* */ or -- cannot hide the real first word.
+        do {
+            $before = $candidate;
+            $candidate = preg_replace('#^/\*.*?\*/#s', '', $candidate);
+            $candidate = preg_replace('#^(--[^\n]*|\#[^\n]*)(\n|$)#', '', $candidate);
+            $candidate = ltrim($candidate);
+        } while ($candidate !== $before);
+
+        if (!preg_match('/^SELECT\b/i', $candidate)) {
+            throw new Exception('Only SELECT queries are allowed. The connector is read-only.');
+        }
+        if (strpos(rtrim($sql, "; \t\r\n"), ';') !== false) {
+            throw new Exception('Only one statement per request is allowed.');
+        }
+        if (preg_match('/\binto\s+(outfile|dumpfile)\b/i', $sql)
+            || preg_match('/\b(load_file|benchmark|sleep|get_lock|release_lock)\s*\(/i', $sql)) {
+            throw new Exception('This query uses a construct the connector does not allow.');
         }
 
         $results = Db::getInstance()->executeS($sql);
