@@ -15,11 +15,15 @@ use PDO;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 class SupplierMigrationStep
 {
     private $db_connection;
     private $prefix;
+
+    /** @var array source id => translation rows, read once per batch */
+    private $langRows = [];
 
     public function __construct($db_connection, $prefix)
     {
@@ -37,6 +41,10 @@ class SupplierMigrationStep
         }
 
         IdMapper::prepare('supplier', array_column($items, 'id_supplier'));
+        // One query for the whole batch instead of one per record
+        $this->langRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}supplier_lang` WHERE id_supplier IN ({ids})",
+            'id_supplier', array_column($items, 'id_supplier'));
 
         foreach ($items as $item) {
             $this->importSupplier($item);
@@ -53,8 +61,7 @@ class SupplierMigrationStep
 
         SchemaHelper::upsert('supplier', $row, ['id_supplier']);
 
-        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}supplier_lang` WHERE id_supplier = $sid");
-        foreach (LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC)) as $lang) {
+        foreach (LanguageMapper::expand(SourceBatch::of($this->langRows, $sid)) as $lang) {
             $lang['id_supplier'] = $tid;
             Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "supplier_lang` WHERE id_supplier = $tid AND id_lang = " . (int)$lang['id_lang']);
             SchemaHelper::insertIgnore('supplier_lang', $lang);

@@ -15,11 +15,15 @@ use PDO;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 class FeatureMigrationStep
 {
     private $db_connection;
     private $prefix;
+
+    /** @var array source id => translation rows, read once per batch */
+    private $langRows = [];
 
     public function __construct($db_connection, $prefix)
     {
@@ -36,6 +40,10 @@ class FeatureMigrationStep
         }
 
         IdMapper::prepare('feature', array_column($items, 'id_feature'));
+        // One query for the whole batch instead of one per record
+        $this->langRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}feature_lang` WHERE id_feature IN ({ids})",
+            'id_feature', array_column($items, 'id_feature'));
 
         foreach ($items as $item) {
             $this->importFeature($item);
@@ -68,8 +76,7 @@ class FeatureMigrationStep
 
     private function importLang($sid, $tid)
     {
-        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}feature_lang` WHERE id_feature = $sid");
-        $langs = LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC));
+        $langs = LanguageMapper::expand(SourceBatch::of($this->langRows, $sid));
 
         foreach ($langs as $lang) {
             $idLang = (int)$lang['id_lang'];

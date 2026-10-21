@@ -20,6 +20,19 @@ class ConnectorClient
     /** @var array what the last request to the source shop did — for error reports */
     private static $lastRequest = [];
 
+    /** @var int how many requests have been sent to the source shop */
+    private static $requestCount = 0;
+
+    /**
+     * Requests sent to the source shop so far. Every one of them is a round trip
+     * over the internet, so this is the number that decides whether a slow source
+     * server can keep up with the migration.
+     */
+    public static function requestCount()
+    {
+        return self::$requestCount;
+    }
+
     /**
      * Timings and outcome of the last call to the source shop. Says whether the
      * name resolved, whether the connection was established, how long the shop
@@ -108,6 +121,7 @@ class ConnectorClient
         $params['action'] = $action;
         $params['token'] = $this->token;
         $postFields = http_build_query($params);
+        ++self::$requestCount;
 
         // Auto-retry on rate limiting (429/503). The migration makes many
         // requests to the connector; a source server with a rate limiter
@@ -238,6 +252,7 @@ class ConnectorClient
     {
         $params['action'] = $action;
         $params['token'] = $this->token;
+        ++self::$requestCount;
 
         $ch = curl_init($this->url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);

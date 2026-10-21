@@ -15,11 +15,15 @@ use PDO;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 class CmsMigrationStep
 {
     private $db_connection;
     private $prefix;
+
+    /** @var array source id_cms => translation rows, read once per batch */
+    private $langRows = [];
     private $source_url;
     private $skip_files;
 
@@ -47,6 +51,10 @@ class CmsMigrationStep
         }
 
         IdMapper::prepare('cms', array_column($cmsPages, 'id_cms'));
+        // All page texts of the batch in one query instead of one query per page
+        $this->langRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}cms_lang` WHERE id_cms IN ({ids}) ORDER BY id_shop ASC",
+            'id_cms', array_column($cmsPages, 'id_cms'));
 
         foreach ($cmsPages as $row) {
             $this->importCmsPage($row);
@@ -59,6 +67,11 @@ class CmsMigrationStep
     {
         $cats = $this->db_connection->query("SELECT * FROM `{$this->prefix}cms_category` ORDER BY id_cms_category ASC")->fetchAll(PDO::FETCH_ASSOC);
         $shopId = SchemaHelper::getTargetShopId();
+
+        // All category names in one query instead of one query per category
+        $catLangs = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}cms_category_lang` WHERE id_cms_category IN ({ids}) ORDER BY id_shop ASC",
+            'id_cms_category', array_column($cats, 'id_cms_category'));
 
         foreach ($cats as $cat) {
             $sid = (int)$cat['id_cms_category'];
@@ -76,7 +89,7 @@ class CmsMigrationStep
             }
             SchemaHelper::upsert('cms_category', $row, ['id_cms_category']);
 
-            $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}cms_category_lang` WHERE id_cms_category = $sid ORDER BY id_shop ASC")->fetchAll(PDO::FETCH_ASSOC));
+            $langs = LanguageMapper::expand(SourceBatch::of($catLangs, $sid));
             $done = [];
             foreach ($langs as $lang) {
                 if (isset($done[(int)$lang['id_lang']])) {
@@ -104,7 +117,7 @@ class CmsMigrationStep
         SchemaHelper::upsert('cms', $row, ['id_cms']);
 
         $shopId = SchemaHelper::getTargetShopId();
-        $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}cms_lang` WHERE id_cms = $sid ORDER BY id_shop ASC")->fetchAll(PDO::FETCH_ASSOC));
+        $langs = LanguageMapper::expand(SourceBatch::of($this->langRows, $sid));
         $done = [];
         foreach ($langs as $lang) {
             if (isset($done[(int)$lang['id_lang']])) {

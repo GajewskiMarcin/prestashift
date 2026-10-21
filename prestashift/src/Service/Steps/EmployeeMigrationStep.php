@@ -15,6 +15,7 @@ use PDO;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 class EmployeeMigrationStep
 {
@@ -23,6 +24,9 @@ class EmployeeMigrationStep
 
     /** @var array source id_tab => target id_tab */
     private $tabs = [];
+
+    /** @var array|null source id_tab => class name, the whole table read once */
+    private $tabClasses = null;
 
     public function __construct($db_connection, $prefix)
     {
@@ -66,6 +70,11 @@ class EmployeeMigrationStep
     {
         $profiles = $this->db_connection->query("SELECT * FROM `{$this->prefix}profile` ORDER BY `id_profile` ASC")->fetchAll(PDO::FETCH_ASSOC);
 
+        // All profile names in one query instead of one query per profile
+        $langRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}profile_lang` WHERE id_profile IN ({ids})",
+            'id_profile', array_column($profiles, 'id_profile'));
+
         foreach ($profiles as $p) {
             $sid = (int)$p['id_profile'];
             $tid = IdMapper::own('profile', $sid);
@@ -75,7 +84,7 @@ class EmployeeMigrationStep
 
             SchemaHelper::insertIgnore('profile', ['id_profile' => $tid]);
 
-            $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}profile_lang` WHERE id_profile = $sid")->fetchAll(PDO::FETCH_ASSOC));
+            $langs = LanguageMapper::expand(SourceBatch::of($langRows, $sid));
             foreach ($langs as $l) {
                 Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "profile_lang` WHERE id_profile = $tid AND id_lang = " . (int)$l['id_lang']);
                 SchemaHelper::insertIgnore('profile_lang', [
@@ -126,12 +135,19 @@ class EmployeeMigrationStep
         if ($sourceTab <= 0) {
             return 0;
         }
-        if (!isset($this->tabs[$sourceTab])) {
-            $class = '';
+        if ($this->tabClasses === null) {
+            // The whole tab table once, instead of a query per employee
+            $this->tabClasses = [];
             try {
-                $class = (string)$this->db_connection->query("SELECT class_name FROM `{$this->prefix}tab` WHERE id_tab = $sourceTab")->fetchColumn();
+                foreach ($this->db_connection->query("SELECT id_tab, class_name FROM `{$this->prefix}tab`")->fetchAll(PDO::FETCH_ASSOC) as $t) {
+                    $this->tabClasses[(int)$t['id_tab']] = (string)$t['class_name'];
+                }
             } catch (\Exception $e) {
             }
+        }
+
+        if (!isset($this->tabs[$sourceTab])) {
+            $class = isset($this->tabClasses[$sourceTab]) ? $this->tabClasses[$sourceTab] : '';
             $target = $class !== '' ? (int)\Tab::getIdFromClassName($class) : 0;
             $this->tabs[$sourceTab] = $target ?: (int)\Tab::getIdFromClassName('AdminDashboard');
         }

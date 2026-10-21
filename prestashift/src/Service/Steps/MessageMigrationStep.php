@@ -13,11 +13,15 @@ namespace PrestaShift\Service\Steps;
 use PDO;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 class MessageMigrationStep
 {
     private $db_connection;
     private $prefix;
+
+    /** @var array source id_customer_thread => message rows, read once per batch */
+    private $messageRows = [];
 
     public function __construct($db_connection, $prefix)
     {
@@ -34,6 +38,10 @@ class MessageMigrationStep
         }
 
         IdMapper::prepare('customer_thread', array_column($threads, 'id_customer_thread'));
+        // All messages of the batch in one query instead of one per thread
+        $this->messageRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}customer_message` WHERE id_customer_thread IN ({ids})",
+            'id_customer_thread', array_column($threads, 'id_customer_thread'));
 
         foreach ($threads as $thread) {
             $this->importThread($thread);
@@ -67,7 +75,7 @@ class MessageMigrationStep
             return;
         }
 
-        $messages = $this->db_connection->query("SELECT * FROM `{$this->prefix}customer_message` WHERE id_customer_thread = " . (int)$data['id_customer_thread'])->fetchAll(PDO::FETCH_ASSOC);
+        $messages = SourceBatch::of($this->messageRows, $data['id_customer_thread']);
         foreach ($messages as $msg) {
             SchemaHelper::upsert('customer_message', IdMapper::row('customer_message', $msg), ['id_customer_message']);
         }

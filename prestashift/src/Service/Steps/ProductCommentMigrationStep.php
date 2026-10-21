@@ -16,6 +16,7 @@ use Exception;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 /**
  * Migrates product reviews from the native "productcomments" module.
@@ -29,6 +30,9 @@ class ProductCommentMigrationStep
 {
     private $db_connection;
     private $prefix;
+
+    /** @var array table => source id_product_comment => rows, read once per batch */
+    private $childRows = [];
 
     public function __construct($db_connection, $prefix)
     {
@@ -53,12 +57,30 @@ class ProductCommentMigrationStep
         }
 
         IdMapper::prepare('product_comment', array_column($comments, 'id_product_comment'));
+        $this->loadChildren(array_column($comments, 'id_product_comment'));
 
         foreach ($comments as $comment) {
             $this->importComment($comment);
         }
 
         return ['count' => count($comments), 'finished' => false];
+    }
+
+    /**
+     * Grades, votes and abuse reports of the whole batch: three queries instead
+     * of three per review.
+     */
+    private function loadChildren(array $ids)
+    {
+        $this->childRows = [];
+        foreach (['product_comment_grade', 'product_comment_usefulness', 'product_comment_report'] as $table) {
+            if (!SchemaHelper::hasTable($table)) {
+                continue;
+            }
+            $this->childRows[$table] = SourceBatch::grouped($this->db_connection,
+                "SELECT * FROM `{$this->prefix}{$table}` WHERE id_product_comment IN ({ids})",
+                'id_product_comment', $ids);
+        }
     }
 
     private function getComments($offset, $limit, $dateFilter = null)
@@ -94,11 +116,7 @@ class ProductCommentMigrationStep
             if (!SchemaHelper::hasTable($table)) {
                 continue;
             }
-            try {
-                $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}{$table}` WHERE id_product_comment = $sid")->fetchAll(PDO::FETCH_ASSOC);
-            } catch (Exception $e) {
-                continue;
-            }
+            $rows = isset($this->childRows[$table]) ? SourceBatch::of($this->childRows[$table], $sid) : [];
             Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "{$table}` WHERE id_product_comment = $tid");
             foreach ($rows as $r) {
                 $trow = IdMapper::row($table, $r);
@@ -124,17 +142,24 @@ class ProductCommentMigrationStep
             return;
         }
 
+        $ids = array_column($criteria, 'id_product_comment_criterion');
+        $criterionLangs = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}product_comment_criterion_lang` WHERE id_product_comment_criterion IN ({ids})",
+            'id_product_comment_criterion', $ids);
+        $criterionLinks = [];
+        foreach (['product_comment_criterion_product', 'product_comment_criterion_category'] as $table) {
+            $criterionLinks[$table] = SourceBatch::grouped($this->db_connection,
+                "SELECT * FROM `{$this->prefix}{$table}` WHERE id_product_comment_criterion IN ({ids})",
+                'id_product_comment_criterion', $ids);
+        }
+
         foreach ($criteria as $criterion) {
             $sid = (int)$criterion['id_product_comment_criterion'];
             $row = IdMapper::row('product_comment_criterion', $criterion);
             $tid = (int)$row['id_product_comment_criterion'];
             SchemaHelper::upsert('product_comment_criterion', $row, ['id_product_comment_criterion']);
 
-            try {
-                $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}product_comment_criterion_lang` WHERE id_product_comment_criterion = $sid")->fetchAll(PDO::FETCH_ASSOC));
-            } catch (Exception $e) {
-                $langs = [];
-            }
+            $langs = LanguageMapper::expand(SourceBatch::of($criterionLangs, $sid));
             foreach ($langs as $lang) {
                 $lang['id_product_comment_criterion'] = $tid;
                 Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "product_comment_criterion_lang` WHERE id_product_comment_criterion = $tid AND id_lang = " . (int)$lang['id_lang']);
@@ -142,11 +167,7 @@ class ProductCommentMigrationStep
             }
 
             foreach (['product_comment_criterion_product' => 'id_product', 'product_comment_criterion_category' => 'id_category'] as $table => $col) {
-                try {
-                    $links = $this->db_connection->query("SELECT * FROM `{$this->prefix}{$table}` WHERE id_product_comment_criterion = $sid")->fetchAll(PDO::FETCH_ASSOC);
-                } catch (Exception $e) {
-                    continue;
-                }
+                $links = SourceBatch::of($criterionLinks[$table], $sid);
                 foreach ($links as $link) {
                     $trow = IdMapper::row($table, $link);
                     if ((int)$trow[$col] > 0) {

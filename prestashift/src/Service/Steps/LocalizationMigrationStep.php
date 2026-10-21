@@ -16,6 +16,7 @@ use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\LogService;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 /**
  * Countries and currencies. Both exist in every shop under ISO codes: records
@@ -53,6 +54,12 @@ class LocalizationMigrationStep
         $shopId = SchemaHelper::getTargetShopId();
         $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}country`")->fetchAll(PDO::FETCH_ASSOC);
 
+        // All country names in one query — a shop has some 250 countries, and
+        // one query each used to be 250 round trips to the source.
+        $langRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}country_lang` WHERE id_country IN ({ids})",
+            'id_country', array_column($rows, 'id_country'));
+
         foreach ($rows as $row) {
             $sid = (int)$row['id_country'];
             IdMapper::own('country', $sid);
@@ -67,7 +74,7 @@ class LocalizationMigrationStep
             }
             SchemaHelper::upsert('country', $trow, ['id_country']);
 
-            $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}country_lang` WHERE id_country = $sid")->fetchAll(PDO::FETCH_ASSOC));
+            $langs = LanguageMapper::expand(SourceBatch::of($langRows, $sid));
             foreach ($langs as $l) {
                 $l['id_country'] = $tid;
                 SchemaHelper::upsert('country_lang', $l, ['id_country', 'id_lang']);
@@ -82,6 +89,11 @@ class LocalizationMigrationStep
         $shopId = SchemaHelper::getTargetShopId();
         $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}currency`")->fetchAll(PDO::FETCH_ASSOC);
 
+        // All currency names in one query (the table is absent before 1.7.6)
+        $langRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}currency_lang` WHERE id_currency IN ({ids})",
+            'id_currency', array_column($rows, 'id_currency'));
+
         foreach ($rows as $row) {
             $sid = (int)$row['id_currency'];
             IdMapper::own('currency', $sid);
@@ -94,11 +106,7 @@ class LocalizationMigrationStep
             SchemaHelper::upsert('currency', $trow, ['id_currency']);
 
             if (SchemaHelper::hasTable('currency_lang')) {
-                try {
-                    $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}currency_lang` WHERE id_currency = $sid")->fetchAll(PDO::FETCH_ASSOC));
-                } catch (\Exception $e) {
-                    $langs = []; // source older than 1.7.6
-                }
+                $langs = LanguageMapper::expand(SourceBatch::of($langRows, $sid));
                 foreach ($langs as $l) {
                     $l['id_currency'] = $tid;
                     SchemaHelper::upsert('currency_lang', $l, ['id_currency', 'id_lang']);

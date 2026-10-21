@@ -15,6 +15,7 @@ use PDO;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 class ProductMigrationStep
 {
@@ -26,6 +27,15 @@ class ProductMigrationStep
 
     /** @var array source id_product_1 => [source id_product_2, ...] for the batch */
     private $accessories = [];
+
+    /** @var array source id_product => translation rows, read once per batch */
+    private $langRows = [];
+
+    /** @var array source id_product => stock rows, read once per batch */
+    private $stockRows = [];
+
+    /** @var array source id_product => category link rows, read once per batch */
+    private $categoryRows = [];
 
     public function __construct($db_connection, $prefix)
     {
@@ -45,6 +55,7 @@ class ProductMigrationStep
         IdMapper::prepare('product', $ids);
         $this->loadCombinationFlags($ids);
         $this->loadAccessories($ids);
+        $this->loadChildren($ids);
 
         foreach ($products as $product) {
             $this->importProduct($product);
@@ -86,6 +97,24 @@ class ProductMigrationStep
             }
         } catch (\Exception $e) {
         }
+    }
+
+    /**
+     * Translations, stock and category links of the whole batch: three queries
+     * instead of three per product.
+     */
+    private function loadChildren(array $ids)
+    {
+        $this->langRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}product_lang` WHERE id_product IN ({ids}) ORDER BY id_shop ASC",
+            'id_product', $ids);
+        $this->stockRows = SourceBatch::grouped($this->db_connection,
+            "SELECT id_product, quantity, out_of_stock FROM `{$this->prefix}stock_available`
+             WHERE id_product IN ({ids}) AND id_product_attribute = 0",
+            'id_product', $ids);
+        $this->categoryRows = SourceBatch::grouped($this->db_connection,
+            "SELECT id_product, id_category, position FROM `{$this->prefix}category_product` WHERE id_product IN ({ids})",
+            'id_product', $ids);
     }
 
     private function importProduct($data)
@@ -205,8 +234,7 @@ class ProductMigrationStep
     private function importProductLang($sid, $tid)
     {
         $shopId = SchemaHelper::getTargetShopId();
-        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}product_lang` WHERE id_product = $sid ORDER BY id_shop ASC");
-        $langs = LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC));
+        $langs = LanguageMapper::expand(SourceBatch::of($this->langRows, $sid));
 
         $done = [];
         foreach ($langs as $lang) {
@@ -284,8 +312,7 @@ class ProductMigrationStep
 
     private function importStock($sid, $tid)
     {
-        $sql = "SELECT quantity, out_of_stock FROM `{$this->prefix}stock_available` WHERE id_product = $sid AND id_product_attribute = 0";
-        $row = $this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+        $row = SourceBatch::of($this->stockRows, $sid);
 
         $qty = isset($row[0]['quantity']) ? (int)$row[0]['quantity'] : 0;
 
@@ -298,8 +325,7 @@ class ProductMigrationStep
 
     private function importCategoryLink($sid, $tid, $defaultCategory)
     {
-        $stmt = $this->db_connection->query("SELECT id_category, position FROM `{$this->prefix}category_product` WHERE id_product = $sid");
-        $cats = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $cats = SourceBatch::of($this->categoryRows, $sid);
 
         Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "category_product` WHERE id_product = $tid");
 

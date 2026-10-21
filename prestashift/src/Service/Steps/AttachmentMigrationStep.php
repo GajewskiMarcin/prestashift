@@ -15,12 +15,17 @@ use PDO;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 use Tools;
 
 class AttachmentMigrationStep
 {
     private $db_connection;
     private $prefix;
+
+    /** @var array source id_attachment => rows, each read once per batch */
+    private $langRows = [];
+    private $productRows = [];
     private $source_url;
     private $skip_files;
 
@@ -41,6 +46,14 @@ class AttachmentMigrationStep
         }
 
         IdMapper::prepare('attachment', array_column($rows, 'id_attachment'));
+        // Two queries for the whole batch instead of two per attachment
+        $ids = array_column($rows, 'id_attachment');
+        $this->langRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}attachment_lang` WHERE id_attachment IN ({ids})",
+            'id_attachment', $ids);
+        $this->productRows = SourceBatch::grouped($this->db_connection,
+            "SELECT id_attachment, id_product FROM `{$this->prefix}product_attachment` WHERE id_attachment IN ({ids})",
+            'id_attachment', $ids);
 
         foreach ($rows as $row) {
             $this->importItem($row);
@@ -67,15 +80,13 @@ class AttachmentMigrationStep
             SchemaHelper::insertIgnore('attachment_shop', ['id_attachment' => $tid, 'id_shop' => SchemaHelper::getTargetShopId()]);
         }
 
-        $stmt = $this->db_connection->query("SELECT * FROM `{$this->prefix}attachment_lang` WHERE id_attachment = $sid");
-        foreach (LanguageMapper::expand($stmt->fetchAll(PDO::FETCH_ASSOC)) as $lang) {
+        foreach (LanguageMapper::expand(SourceBatch::of($this->langRows, $sid)) as $lang) {
             $lang['id_attachment'] = $tid;
             Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "attachment_lang` WHERE id_attachment = $tid AND id_lang = " . (int)$lang['id_lang']);
             SchemaHelper::insertIgnore('attachment_lang', $lang);
         }
 
-        $stmt = $this->db_connection->query("SELECT id_product FROM `{$this->prefix}product_attachment` WHERE id_attachment = $sid");
-        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $link) {
+        foreach (SourceBatch::of($this->productRows, $sid) as $link) {
             $idProduct = IdMapper::ref('product', (int)$link['id_product']);
             if ($idProduct > 0) {
                 SchemaHelper::insertIgnore('product_attachment', ['id_product' => $idProduct, 'id_attachment' => $tid]);

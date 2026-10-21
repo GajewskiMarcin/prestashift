@@ -16,6 +16,7 @@ use Exception;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 class CustomerMigrationStep
 {
@@ -133,6 +134,11 @@ class CustomerMigrationStep
     {
         $groups = $this->db_connection->query("SELECT * FROM `{$this->prefix}group`")->fetchAll(PDO::FETCH_ASSOC);
 
+        // All group names in one query instead of one query per group
+        $langRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}group_lang` WHERE id_group IN ({ids})",
+            'id_group', array_column($groups, 'id_group'));
+
         foreach ($groups as $group) {
             $sid = (int)$group['id_group'];
             $tid = IdMapper::own('group', $sid);
@@ -156,7 +162,7 @@ class CustomerMigrationStep
             } catch (Exception $e) {
             }
 
-            $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}group_lang` WHERE id_group = $sid")->fetchAll(PDO::FETCH_ASSOC));
+            $langs = LanguageMapper::expand(SourceBatch::of($langRows, $sid));
             foreach ($langs as $lang) {
                 Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "group_lang` WHERE id_group = $tid AND id_lang = " . (int)$lang['id_lang']);
                 SchemaHelper::insertIgnore('group_lang', [

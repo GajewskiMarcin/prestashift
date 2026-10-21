@@ -15,11 +15,15 @@ use PDO;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 class CustomizationFieldMigrationStep
 {
     private $db_connection;
     private $prefix;
+
+    /** @var array source id_customization_field => label rows, read once per batch */
+    private $langRows = [];
 
     public function __construct($db_connection, $prefix)
     {
@@ -42,6 +46,10 @@ class CustomizationFieldMigrationStep
         }
 
         IdMapper::prepare('customization_field', array_column($items, 'id_customization_field'));
+        // One query for the whole batch instead of one per field
+        $this->langRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}customization_field_lang` WHERE id_customization_field IN ({ids}) ORDER BY id_lang ASC",
+            'id_customization_field', array_column($items, 'id_customization_field'));
 
         foreach ($items as $item) {
             $this->importItem($item);
@@ -62,12 +70,7 @@ class CustomizationFieldMigrationStep
 
         SchemaHelper::upsert('customization_field', $row, ['id_customization_field']);
 
-        try {
-            $sql = "SELECT * FROM `{$this->prefix}customization_field_lang` WHERE id_customization_field = $sid ORDER BY id_lang ASC";
-            $rows = LanguageMapper::expand($this->db_connection->query($sql)->fetchAll(PDO::FETCH_ASSOC));
-        } catch (\Exception $e) {
-            return;
-        }
+        $rows = LanguageMapper::expand(SourceBatch::of($this->langRows, $sid));
 
         $shopId = SchemaHelper::getTargetShopId();
         Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "customization_field_lang` WHERE id_customization_field = $tid AND id_shop = $shopId");

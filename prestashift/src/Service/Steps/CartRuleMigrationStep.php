@@ -16,6 +16,7 @@ use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\LogService;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 /**
  * Vouchers with everything that limits them: customer, countries, groups,
@@ -27,6 +28,16 @@ class CartRuleMigrationStep
 {
     private $db_connection;
     private $prefix;
+
+    /** @var array source id_cart_rule => rows, each read once per batch */
+    private $langRows = [];
+    private $restrictionRows = [];
+    private $combinationRows = [];
+    private $ruleGroupRows = [];
+
+    /** @var array source id_product_rule_group / id_product_rule => rows */
+    private $productRuleRows = [];
+    private $ruleValueRows = [];
 
     /** product rule type => entity of id_item */
     private static $itemEntities = [
@@ -52,12 +63,72 @@ class CartRuleMigrationStep
         }
 
         IdMapper::prepare('cart_rule', array_column($items, 'id_cart_rule'));
+        $this->loadChildren(array_column($items, 'id_cart_rule'));
 
         foreach ($items as $item) {
             $this->importCartRule($item);
         }
 
         return ['count' => count($items), 'finished' => false];
+    }
+
+    /**
+     * Everything that limits the vouchers of this batch, read in eight queries
+     * instead of six or more per voucher.
+     */
+    private function loadChildren(array $ids)
+    {
+        $this->langRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}cart_rule_lang` WHERE id_cart_rule IN ({ids})",
+            'id_cart_rule', $ids);
+
+        $this->restrictionRows = [];
+        foreach (['cart_rule_country' => 'id_country', 'cart_rule_group' => 'id_group', 'cart_rule_carrier' => 'id_carrier'] as $table => $column) {
+            $this->restrictionRows[$table] = SourceBatch::grouped($this->db_connection,
+                "SELECT id_cart_rule, `$column` FROM `{$this->prefix}$table` WHERE id_cart_rule IN ({ids})",
+                'id_cart_rule', $ids);
+        }
+
+        // A combinable pair belongs to both of its vouchers
+        $this->combinationRows = [];
+        $list = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if ($list) {
+            try {
+                $in = implode(',', $list);
+                $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}cart_rule_combination`
+                    WHERE id_cart_rule_1 IN ($in) OR id_cart_rule_2 IN ($in)")->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($rows as $r) {
+                    $this->combinationRows[(int)$r['id_cart_rule_1']][] = $r;
+                    $this->combinationRows[(int)$r['id_cart_rule_2']][] = $r;
+                }
+            } catch (\Exception $e) {
+            }
+        }
+
+        // Product conditions: groups, their rules, and the rules' items
+        $this->ruleGroupRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}cart_rule_product_rule_group` WHERE id_cart_rule IN ({ids})",
+            'id_cart_rule', $ids);
+
+        $groupIds = [];
+        foreach ($this->ruleGroupRows as $rows) {
+            foreach ($rows as $g) {
+                $groupIds[] = (int)$g['id_product_rule_group'];
+            }
+        }
+        $this->productRuleRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}cart_rule_product_rule` WHERE id_product_rule_group IN ({ids})",
+            'id_product_rule_group', $groupIds);
+
+        $ruleIds = [];
+        foreach ($this->productRuleRows as $rows) {
+            foreach ($rows as $r) {
+                $ruleIds[] = (int)$r['id_product_rule'];
+            }
+        }
+        $this->ruleValueRows = SourceBatch::grouped($this->db_connection,
+            "SELECT id_product_rule, id_item FROM `{$this->prefix}cart_rule_product_rule_value` WHERE id_product_rule IN ({ids})",
+            'id_product_rule', $ruleIds);
     }
 
     private function getData($offset, $limit, $dateFilter = null)
@@ -114,7 +185,7 @@ class CartRuleMigrationStep
 
     private function importLang($sid, $tid)
     {
-        $rows = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}cart_rule_lang` WHERE id_cart_rule = $sid")->fetchAll(PDO::FETCH_ASSOC));
+        $rows = LanguageMapper::expand(SourceBatch::of($this->langRows, $sid));
 
         foreach ($rows as $row) {
             Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "cart_rule_lang` WHERE id_cart_rule = $tid AND id_lang = " . (int)$row['id_lang']);
@@ -132,11 +203,7 @@ class CartRuleMigrationStep
      */
     private function importRestriction($table, $column, $entity, $sid, $tid)
     {
-        try {
-            $rows = $this->db_connection->query("SELECT `$column` FROM `{$this->prefix}$table` WHERE id_cart_rule = $sid")->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Exception $e) {
-            return;
-        }
+        $rows = SourceBatch::of($this->restrictionRows[$table], $sid);
 
         Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "$table` WHERE id_cart_rule = $tid");
 
@@ -153,11 +220,7 @@ class CartRuleMigrationStep
      */
     private function importCombinations($sid, $tid)
     {
-        try {
-            $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}cart_rule_combination` WHERE id_cart_rule_1 = $sid OR id_cart_rule_2 = $sid")->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Exception $e) {
-            return;
-        }
+        $rows = SourceBatch::of($this->combinationRows, $sid);
 
         foreach ($rows as $r) {
             $row = IdMapper::row('cart_rule_combination', $r);
@@ -173,11 +236,7 @@ class CartRuleMigrationStep
      */
     private function importProductRules($sid, $tid)
     {
-        try {
-            $groups = $this->db_connection->query("SELECT * FROM `{$this->prefix}cart_rule_product_rule_group` WHERE id_cart_rule = $sid")->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Exception $e) {
-            return;
-        }
+        $groups = SourceBatch::of($this->ruleGroupRows, $sid);
 
         // Replace the conditions as a whole
         $old = Db::getInstance()->executeS("SELECT id_product_rule_group FROM `" . _DB_PREFIX_ . "cart_rule_product_rule_group` WHERE id_cart_rule = $tid");
@@ -196,13 +255,13 @@ class CartRuleMigrationStep
             $grow = IdMapper::row('cart_rule_product_rule_group', $group);
             SchemaHelper::upsert('cart_rule_product_rule_group', $grow, ['id_product_rule_group']);
 
-            $rules = $this->db_connection->query("SELECT * FROM `{$this->prefix}cart_rule_product_rule` WHERE id_product_rule_group = " . (int)$group['id_product_rule_group'])->fetchAll(PDO::FETCH_ASSOC);
+            $rules = SourceBatch::of($this->productRuleRows, $group['id_product_rule_group']);
             foreach ($rules as $rule) {
                 $rrow = IdMapper::row('cart_rule_product_rule', $rule);
                 SchemaHelper::upsert('cart_rule_product_rule', $rrow, ['id_product_rule']);
 
                 $entity = isset(self::$itemEntities[$rule['type']]) ? self::$itemEntities[$rule['type']] : null;
-                $values = $this->db_connection->query("SELECT id_item FROM `{$this->prefix}cart_rule_product_rule_value` WHERE id_product_rule = " . (int)$rule['id_product_rule'])->fetchAll(PDO::FETCH_ASSOC);
+                $values = SourceBatch::of($this->ruleValueRows, $rule['id_product_rule']);
                 foreach ($values as $v) {
                     $item = $entity ? IdMapper::ref($entity, (int)$v['id_item']) : 0;
                     if ($item > 0) {

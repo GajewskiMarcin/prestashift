@@ -15,11 +15,15 @@ use PDO;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 class TagMigrationStep
 {
     private $db_connection;
     private $prefix;
+
+    /** @var array source id_tag => product link rows, read once per batch */
+    private $productRows = [];
 
     public function __construct($db_connection, $prefix)
     {
@@ -34,6 +38,11 @@ class TagMigrationStep
         if (empty($items)) {
             return ['count' => 0, 'finished' => true];
         }
+
+        // All product links of the batch in one query instead of one per tag
+        $this->productRows = SourceBatch::grouped($this->db_connection,
+            "SELECT id_tag, id_product FROM `{$this->prefix}product_tag` WHERE id_tag IN ({ids})",
+            'id_tag', array_column($items, 'id_tag'));
 
         foreach ($items as $item) {
             $this->importTag($item);
@@ -76,11 +85,7 @@ class TagMigrationStep
 
     private function importProductTags($sid, $tid, $lang)
     {
-        try {
-            $rows = $this->db_connection->query("SELECT id_product FROM `{$this->prefix}product_tag` WHERE id_tag = $sid")->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Exception $e) {
-            return;
-        }
+        $rows = SourceBatch::of($this->productRows, $sid);
 
         foreach ($rows as $row) {
             $idProduct = IdMapper::ref('product', (int)$row['id_product']);

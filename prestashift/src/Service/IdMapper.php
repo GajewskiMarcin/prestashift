@@ -908,7 +908,9 @@ class IdMapper
                         return self::existing('group', (int) \Configuration::get($key) ?: $default);
                     }
                 }
-                $name = self::sourceValue("SELECT `name` FROM `" . self::$prefix . "group_lang` WHERE `id_group` = $sourceId ORDER BY (`id_lang` = " . (int) self::sourceConfig('PS_LANG_DEFAULT', 1) . ') DESC');
+                $groups = self::sourceTable('group_names', "SELECT `id_group`, `name` FROM `" . self::$prefix . "group_lang`
+                    ORDER BY (`id_lang` = " . (int) self::sourceConfig('PS_LANG_DEFAULT', 1) . ') DESC', 'id_group');
+                $name = isset($groups[$sourceId]) ? (string) $groups[$sourceId]['name'] : '';
 
                 return $name === '' ? 0 : (int) Db::getInstance()->getValue("SELECT `id_group` FROM `" . _DB_PREFIX_ . "group_lang` WHERE `name` = '" . pSQL($name) . "'", false);
 
@@ -943,7 +945,9 @@ class IdMapper
                 if ($sourceId === (int) _PS_ADMIN_PROFILE_) {
                     return self::existing('profile', (int) _PS_ADMIN_PROFILE_);
                 }
-                $name = self::sourceValue("SELECT `name` FROM `" . self::$prefix . "profile_lang` WHERE `id_profile` = $sourceId ORDER BY (`id_lang` = " . (int) self::sourceConfig('PS_LANG_DEFAULT', 1) . ') DESC');
+                $profiles = self::sourceTable('profile_names', "SELECT `id_profile`, `name` FROM `" . self::$prefix . "profile_lang`
+                    ORDER BY (`id_lang` = " . (int) self::sourceConfig('PS_LANG_DEFAULT', 1) . ') DESC', 'id_profile');
+                $name = isset($profiles[$sourceId]) ? (string) $profiles[$sourceId]['name'] : '';
 
                 return $name === '' ? 0 : (int) Db::getInstance()->getValue("SELECT `id_profile` FROM `" . _DB_PREFIX_ . "profile_lang` WHERE `name` = '" . pSQL($name) . "'", false);
 
@@ -964,10 +968,11 @@ class IdMapper
                     WHERE `iso_code` = '" . pSQL($iso) . "' ORDER BY `deleted` ASC", false);
 
             case 'state':
-                $row = self::sourceRow("SELECT `iso_code`, `id_country` FROM `" . self::$prefix . "state` WHERE `id_state` = $sourceId");
-                if (!$row) {
+                $states = self::sourceTable('states', "SELECT `id_state`, `iso_code`, `id_country` FROM `" . self::$prefix . 'state`', 'id_state');
+                if (!isset($states[$sourceId])) {
                     return 0;
                 }
+                $row = $states[$sourceId];
                 $country = self::ref('country', (int) $row['id_country']);
                 if ($country <= 0) {
                     return 0;
@@ -977,9 +982,10 @@ class IdMapper
                     WHERE `iso_code` = '" . pSQL($row['iso_code']) . "' AND `id_country` = " . (int) $country, false);
 
             case 'tax':
-                $row = self::sourceRow("SELECT t.`rate`, tl.`name` FROM `" . self::$prefix . "tax` t
+                $taxes = self::sourceTable('taxes', "SELECT t.`id_tax`, t.`rate`, tl.`name` FROM `" . self::$prefix . "tax` t
                     LEFT JOIN `" . self::$prefix . "tax_lang` tl ON tl.`id_tax` = t.`id_tax`
-                    WHERE t.`id_tax` = $sourceId ORDER BY (tl.`id_lang` = " . (int) self::sourceConfig('PS_LANG_DEFAULT', 1) . ') DESC');
+                    ORDER BY (tl.`id_lang` = " . (int) self::sourceConfig('PS_LANG_DEFAULT', 1) . ') DESC', 'id_tax');
+                $row = isset($taxes[$sourceId]) ? $taxes[$sourceId] : null;
                 if (!$row || $row['name'] === null) {
                     return 0;
                 }
@@ -990,7 +996,8 @@ class IdMapper
                     ORDER BY t.`deleted` ASC', false);
 
             case 'tax_rules_group':
-                $name = self::sourceValue("SELECT `name` FROM `" . self::$prefix . "tax_rules_group` WHERE `id_tax_rules_group` = $sourceId");
+                $trg = self::sourceTable('tax_rules_groups', "SELECT `id_tax_rules_group`, `name` FROM `" . self::$prefix . 'tax_rules_group`', 'id_tax_rules_group');
+                $name = isset($trg[$sourceId]) ? (string) $trg[$sourceId]['name'] : '';
                 if ($name === '') {
                     return 0;
                 }
@@ -1071,7 +1078,8 @@ class IdMapper
                     return (int) $map[$sourceId];
                 }
                 if (!isset(self::$dict['zone'][$sourceId])) {
-                    $name = self::sourceValue("SELECT `name` FROM `" . self::$prefix . "zone` WHERE `id_zone` = $sourceId");
+                    $zones = self::sourceTable('zones', "SELECT `id_zone`, `name` FROM `" . self::$prefix . 'zone`', 'id_zone');
+                    $name = isset($zones[$sourceId]) ? (string) $zones[$sourceId]['name'] : '';
                     self::$dict['zone'][$sourceId] = $name === '' ? 0 : (int) Db::getInstance()->getValue("SELECT `id_zone` FROM `" . _DB_PREFIX_ . "zone`
                         WHERE `name` = '" . pSQL($name) . "'", false);
                 }
@@ -1098,6 +1106,34 @@ class IdMapper
         }
 
         return 0;
+    }
+
+    /**
+     * A whole reference table of the source, read once and kept for the run.
+     *
+     * Matching by natural key used to read a single row per record, and over
+     * the connector every such read is an HTTP request to the source shop.
+     * The first row of each id wins, which is what the per-row queries with
+     * their ORDER BY ... LIMIT 1 did.
+     */
+    private static function sourceTable($key, $sql, $idColumn)
+    {
+        if (!isset(self::$dict[$key])) {
+            self::$dict[$key] = [];
+            try {
+                $rows = self::$conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($rows as $row) {
+                    $id = (int) $row[$idColumn];
+                    if (!isset(self::$dict[$key][$id])) {
+                        self::$dict[$key][$id] = $row;
+                    }
+                }
+            } catch (\Exception $e) {
+                // source table unreadable — no match
+            }
+        }
+
+        return self::$dict[$key];
     }
 
     private static function sourceIso($table, $sourceId)

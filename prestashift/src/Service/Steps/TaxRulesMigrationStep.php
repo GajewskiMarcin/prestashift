@@ -15,6 +15,7 @@ use PDO;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 /**
  * Taxes and tax rules groups. A tax (same name and rate) or a group (same
@@ -25,6 +26,9 @@ class TaxRulesMigrationStep
 {
     private $db_connection;
     private $prefix;
+
+    /** @var array source id_tax_rules_group => rule rows, read once per batch */
+    private $ruleRows = [];
 
     public function __construct($db_connection, $prefix)
     {
@@ -44,6 +48,11 @@ class TaxRulesMigrationStep
             return ['count' => 0, 'finished' => true];
         }
 
+        // All rules of the batch in one query instead of one query per group
+        $this->ruleRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}tax_rule` WHERE id_tax_rules_group IN ({ids})",
+            'id_tax_rules_group', array_column($rows, 'id_tax_rules_group'));
+
         foreach ($rows as $row) {
             $this->importGroup($row);
         }
@@ -55,6 +64,11 @@ class TaxRulesMigrationStep
     {
         $taxes = $this->db_connection->query("SELECT * FROM `{$this->prefix}tax`")->fetchAll(PDO::FETCH_ASSOC);
 
+        // All tax names in one query instead of one query per tax
+        $langRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}tax_lang` WHERE id_tax IN ({ids})",
+            'id_tax', array_column($taxes, 'id_tax'));
+
         foreach ($taxes as $tax) {
             $sid = (int)$tax['id_tax'];
             $tid = IdMapper::own('tax', $sid);
@@ -65,7 +79,7 @@ class TaxRulesMigrationStep
             $tax['id_tax'] = $tid;
             SchemaHelper::upsert('tax', $tax, ['id_tax']);
 
-            $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}tax_lang` WHERE id_tax = $sid")->fetchAll(PDO::FETCH_ASSOC));
+            $langs = LanguageMapper::expand(SourceBatch::of($langRows, $sid));
             foreach ($langs as $lang) {
                 $lang['id_tax'] = $tid;
                 SchemaHelper::upsert('tax_lang', $lang, ['id_tax', 'id_lang']);
@@ -86,7 +100,7 @@ class TaxRulesMigrationStep
 
         Db::getInstance()->execute("REPLACE INTO `" . _DB_PREFIX_ . "tax_rules_group_shop` (id_tax_rules_group, id_shop) VALUES ($tid, " . SchemaHelper::getTargetShopId() . ")");
 
-        $rules = $this->db_connection->query("SELECT * FROM `{$this->prefix}tax_rule` WHERE id_tax_rules_group = $sid")->fetchAll(PDO::FETCH_ASSOC);
+        $rules = SourceBatch::of($this->ruleRows, $sid);
 
         Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "tax_rule` WHERE id_tax_rules_group = $tid");
 

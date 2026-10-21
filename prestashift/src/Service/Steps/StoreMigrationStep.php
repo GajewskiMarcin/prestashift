@@ -15,11 +15,15 @@ use PDO;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 class StoreMigrationStep
 {
     private $db_connection;
     private $prefix;
+
+    /** @var array source id => translation rows, read once per batch */
+    private $langRows = [];
 
     public function __construct($db_connection, $prefix)
     {
@@ -34,6 +38,11 @@ class StoreMigrationStep
         if (empty($items)) {
             return ['count' => 0, 'finished' => true];
         }
+
+        // One query for the whole batch instead of one per record
+        $this->langRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}store_lang` WHERE id_store IN ({ids})",
+            'id_store', array_column($items, 'id_store'));
 
         foreach ($items as $item) {
             $this->importStore($item);
@@ -69,11 +78,7 @@ class StoreMigrationStep
 
         SchemaHelper::upsert('store', $row, ['id_store']);
 
-        try {
-            $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}store_lang` WHERE id_store = $sid")->fetchAll(PDO::FETCH_ASSOC));
-        } catch (\Exception $e) {
-            $langs = [];
-        }
+        $langs = LanguageMapper::expand(SourceBatch::of($this->langRows, $sid));
         Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "store_lang` WHERE id_store = $tid");
         foreach ($langs as $lang) {
             $lang['id_store'] = $tid;

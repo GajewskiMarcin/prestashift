@@ -15,11 +15,15 @@ use PDO;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 class ContactMigrationStep
 {
     private $db_connection;
     private $prefix;
+
+    /** @var array source id => translation rows, read once per batch */
+    private $langRows = [];
 
     public function __construct($db_connection, $prefix)
     {
@@ -37,6 +41,11 @@ class ContactMigrationStep
                 return ['count' => 0, 'finished' => true];
             }
 
+            // One query for the whole batch instead of one per record
+            $this->langRows = SourceBatch::grouped($this->db_connection,
+                "SELECT * FROM `{$this->prefix}contact_lang` WHERE id_contact IN ({ids})",
+                'id_contact', array_column($rows, 'id_contact'));
+
             foreach ($rows as $row) {
                 $this->importContact($row);
             }
@@ -53,11 +62,7 @@ class ContactMigrationStep
 
         SchemaHelper::upsert('contact', $row, ['id_contact']);
 
-        try {
-            $langs = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}contact_lang` WHERE id_contact = $sid")->fetchAll(PDO::FETCH_ASSOC));
-        } catch (\Exception $e) {
-            $langs = [];
-        }
+        $langs = LanguageMapper::expand(SourceBatch::of($this->langRows, $sid));
         Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "contact_lang` WHERE id_contact = $tid");
         foreach ($langs as $lang) {
             $lang['id_contact'] = $tid;

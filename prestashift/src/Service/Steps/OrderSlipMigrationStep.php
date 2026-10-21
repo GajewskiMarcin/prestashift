@@ -14,11 +14,15 @@ use Db;
 use PDO;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 class OrderSlipMigrationStep
 {
     private $db_connection;
     private $prefix;
+
+    /** @var array source id_order_slip => detail rows, read once per batch */
+    private $detailRows = [];
 
     public function __construct($db_connection, $prefix)
     {
@@ -39,6 +43,10 @@ class OrderSlipMigrationStep
         }
 
         IdMapper::prepare('order_slip', array_column($slips, 'id_order_slip'));
+        // All slip lines of the batch in one query instead of one per slip
+        $this->detailRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}order_slip_detail` WHERE id_order_slip IN ({ids})",
+            'id_order_slip', array_column($slips, 'id_order_slip'));
 
         foreach ($slips as $slip) {
             $this->importSlip($slip);
@@ -71,11 +79,7 @@ class OrderSlipMigrationStep
             return;
         }
 
-        try {
-            $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}order_slip_detail` WHERE id_order_slip = " . (int)$data['id_order_slip'])->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Exception $e) {
-            return;
-        }
+        $rows = SourceBatch::of($this->detailRows, $data['id_order_slip']);
 
         Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "order_slip_detail` WHERE id_order_slip = $tid");
 

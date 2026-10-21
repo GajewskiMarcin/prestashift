@@ -16,6 +16,7 @@ use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\LogService;
 use PrestaShift\Service\SchemaHelper;
+use PrestaShift\Service\SourceBatch;
 
 /**
  * Carriers.
@@ -40,6 +41,14 @@ class CarrierMigrationStep
     private $zoneMap = [];
     private $userZoneMap = [];
 
+    /** @var array source id_carrier => rows, each read once per batch */
+    private $langRows = [];
+    private $groupRows = [];
+    private $zoneRows = [];
+    private $rangeRows = [];
+    private $deliveryRows = [];
+    private $taxRows = [];
+
     public function __construct($db_connection, $prefix, $skip_files = false, $zoneMap = [])
     {
         $this->db_connection = $db_connection;
@@ -61,12 +70,43 @@ class CarrierMigrationStep
         }
 
         IdMapper::prepare('carrier', array_column($items, 'id_carrier'));
+        $this->loadChildren(array_column($items, 'id_carrier'));
 
         foreach ($items as $item) {
             $this->importCarrier($item);
         }
 
         return ['count' => count($items), 'finished' => false];
+    }
+
+    /**
+     * Names, groups, zones, price ranges, prices and tax rules of every carrier
+     * in the batch: six queries instead of six per carrier plus one per price
+     * range.
+     */
+    private function loadChildren(array $ids)
+    {
+        $this->langRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}carrier_lang` WHERE id_carrier IN ({ids}) ORDER BY id_shop ASC",
+            'id_carrier', $ids);
+        $this->groupRows = SourceBatch::grouped($this->db_connection,
+            "SELECT id_carrier, id_group FROM `{$this->prefix}carrier_group` WHERE id_carrier IN ({ids})",
+            'id_carrier', $ids);
+        $this->zoneRows = SourceBatch::grouped($this->db_connection,
+            "SELECT id_carrier, id_zone FROM `{$this->prefix}carrier_zone` WHERE id_carrier IN ({ids})",
+            'id_carrier', $ids);
+        $this->rangeRows = [];
+        foreach (['range_weight', 'range_price'] as $table) {
+            $this->rangeRows[$table] = SourceBatch::grouped($this->db_connection,
+                "SELECT * FROM `{$this->prefix}$table` WHERE id_carrier IN ({ids})",
+                'id_carrier', $ids);
+        }
+        $this->deliveryRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}delivery` WHERE id_carrier IN ({ids})",
+            'id_carrier', $ids);
+        $this->taxRows = SourceBatch::grouped($this->db_connection,
+            "SELECT * FROM `{$this->prefix}carrier_tax_rules_group_shop` WHERE id_carrier IN ({ids}) ORDER BY id_shop ASC",
+            'id_carrier', $ids);
     }
 
     /**
@@ -153,7 +193,7 @@ class CarrierMigrationStep
     private function importCarrierLang($sid, $tid)
     {
         $shopId = SchemaHelper::getTargetShopId();
-        $rows = LanguageMapper::expand($this->db_connection->query("SELECT * FROM `{$this->prefix}carrier_lang` WHERE id_carrier = $sid ORDER BY id_shop ASC")->fetchAll(PDO::FETCH_ASSOC));
+        $rows = LanguageMapper::expand(SourceBatch::of($this->langRows, $sid));
 
         $done = [];
         foreach ($rows as $row) {
@@ -171,7 +211,7 @@ class CarrierMigrationStep
     private function importCarrierGroups($sid, $tid)
     {
         $groups = [];
-        foreach ($this->db_connection->query("SELECT id_group FROM `{$this->prefix}carrier_group` WHERE id_carrier = $sid")->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        foreach (SourceBatch::of($this->groupRows, $sid) as $row) {
             $gid = IdMapper::ref('group', (int)$row['id_group']);
             if ($gid > 0) {
                 $groups[$gid] = $gid;
@@ -198,7 +238,7 @@ class CarrierMigrationStep
     {
         Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "carrier_zone` WHERE id_carrier = $tid");
 
-        foreach ($this->db_connection->query("SELECT id_zone FROM `{$this->prefix}carrier_zone` WHERE id_carrier = $sid")->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        foreach (SourceBatch::of($this->zoneRows, $sid) as $row) {
             $zone = $this->mapZoneId($row['id_zone']);
             if ($zone !== null) {
                 Db::getInstance()->execute("INSERT IGNORE INTO `" . _DB_PREFIX_ . "carrier_zone` (id_carrier, id_zone) VALUES ($tid, $zone)");
@@ -214,7 +254,7 @@ class CarrierMigrationStep
         Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "range_price` WHERE id_carrier = $tid");
 
         foreach (['range_weight', 'range_price'] as $table) {
-            $ranges = $this->db_connection->query("SELECT * FROM `{$this->prefix}$table` WHERE id_carrier = $sid")->fetchAll(PDO::FETCH_ASSOC);
+            $ranges = SourceBatch::of($this->rangeRows[$table], $sid);
             foreach ($ranges as $range) {
                 $trow = IdMapper::row($table, $range);
                 if (!SchemaHelper::upsert($table, $trow, ['id_' . $table])) {
@@ -228,11 +268,11 @@ class CarrierMigrationStep
     private function importDelivery($sid, $tid, $rangeCol, $sidRange, $tidRange)
     {
         $log = LogService::getInstance();
-        try {
-            $deliveries = $this->db_connection->query("SELECT * FROM `{$this->prefix}delivery` WHERE id_carrier = $sid AND $rangeCol = $sidRange")->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Exception $e) {
-            $log->error("Carrier delivery fetch failed: carrier=$sid, $rangeCol=$sidRange: " . $e->getMessage());
-            return;
+        $deliveries = [];
+        foreach (SourceBatch::of($this->deliveryRows, $sid) as $d) {
+            if ((int)$d[$rangeCol] === $sidRange) {
+                $deliveries[] = $d;
+            }
         }
 
         $seen = [];
@@ -266,11 +306,7 @@ class CarrierMigrationStep
 
     private function importTaxRules($sid, $tid)
     {
-        try {
-            $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}carrier_tax_rules_group_shop` WHERE id_carrier = $sid ORDER BY id_shop ASC")->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Exception $e) {
-            return; // table absent in the source version
-        }
+        $rows = SourceBatch::of($this->taxRows, $sid);
 
         $shopId = SchemaHelper::getTargetShopId();
         Db::getInstance()->execute("DELETE FROM `" . _DB_PREFIX_ . "carrier_tax_rules_group_shop` WHERE id_carrier = $tid AND id_shop = $shopId");
