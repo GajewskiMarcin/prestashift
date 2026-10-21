@@ -249,6 +249,22 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $prefix = $test['prefix'] ?? $config['db_prefix'];
             $sourceVersion = $test['ps_version'] ?? 'unknown';
 
+            // How many shops the source holds. A multistore source migrates as
+            // one shop: every per-shop table is read ordered by id_shop and the
+            // first row wins, so the lowest-numbered shop is the one that moves.
+            // That is a reasonable default and a terrible surprise, so it is
+            // said out loud here instead of being discovered from the prices.
+            $sourceShops = [];
+            try {
+                $rows = $conn->query('SELECT `id_shop`, `name` FROM `' . $prefix . 'shop` ORDER BY `id_shop` ASC')
+                    ->fetchAll(\PDO::FETCH_ASSOC);
+                foreach ((array) $rows as $row) {
+                    $sourceShops[(int) $row['id_shop']] = (string) $row['name'];
+                }
+            } catch (\Throwable $e) {
+                // single-shop installations before 1.5 have no shop table
+            }
+
             // Remembered for the error reports: knowing the source shop's
             // PrestaShop, PHP and connector versions saves a round of questions.
             \Configuration::updateValue('PRESTASHIFT_SOURCE_INFO', json_encode([
@@ -256,10 +272,21 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                 'php_version' => $test['php_version'] ?? 'unknown',
                 'version' => $test['version'] ?? 'unknown',
                 'prefix' => $prefix,
+                'shops' => count($sourceShops),
             ]));
             $targetVersion = _PS_VERSION_;
 
             $warnings = $this->getVersionWarnings($sourceVersion, $targetVersion);
+
+            if (count($sourceShops) > 1) {
+                $firstId = (int) array_key_first($sourceShops);
+                $warnings[] = sprintf(
+                    $this->module->l('The source is a multistore installation with %1$d shops. Only the data of shop "%2$s" (id %3$d) will be migrated — the other shops are ignored.', 'AdminPrestaShiftMigrationController'),
+                    count($sourceShops),
+                    $sourceShops[$firstId],
+                    $firstId
+                );
+            }
 
             $methodLabel = ($method === 'direct') ? 'Direct DB' : 'Bridge';
             $response = [

@@ -625,3 +625,73 @@ Sprawdzenia poza „zero błędów":
   zachowanie zgodne z multistore PrestaShop;
 - **tryb bezpośredni** wykrył błąd `meta` (duplikat strony `cart`), który
   pochodził z mojej zbyt szerokiej adopcji numerów z A14 i został naprawiony.
+
+---
+
+## A17. Trzy dziury funkcjonalne, zamknięte 2026-10-22
+
+Wcześniejsze testy pomijały trzy rzeczy, które nie są kwestią ilości danych, a
+logiki. Każda sprawdzona na małym sklepie z kompletem encji.
+
+### Źródło z więcej niż jednym językiem
+
+Do źródła dodany drugi język (`pl`) wraz z wierszami we wszystkich 30 tabelach
+tłumaczeń (653 wiersze), z nazwami oznaczonymi przedrostkiem, żeby było widać,
+co gdzie trafia. Dwie ścieżki:
+
+- **cel ma ten język**: do nowego sklepu trafiły oba (po 20 wierszy
+  `product_lang` na język, nazwy „Hummingbird CHANGED" i „PL Hummingbird
+  CHANGED"). Kategorie 9 i 7, bo kategoria główna i „Strona główna" są w mapie
+  oznaczone jako **połączone** — należą do nowego sklepu i moduł ich nie
+  nadpisuje, co jest zachowaniem zamierzonym;
+- **cel nie ma tego języka**: przeniosły się wyłącznie wiersze angielskie, a w
+  dzienniku stanęło ostrzeżenie: *„Language 'pl' of the source is not installed
+  in the target — its translations are not migrated. Install it in
+  International > Translations"*. Żadnego błędu, żadnych wierszy z nieistniejącym
+  numerem języka.
+
+### Mapowanie statusów zamówień i stref przewoźników
+
+Dotąd te dwie opcje szły we wszystkich testach puste. Przebieg z mapą statusów
+`1→5, 6→7, 8→2, 10→11` i stref `1→3, 2→5`:
+
+| zamówienie | status w źródle | status w celu |
+|---|---|---|
+| 1 | 6 | **7** (Refunded) |
+| 2 | 1 | **5** (Delivered) |
+| 3 | 8 | **2** (Payment accepted) |
+| 4 | 1 | **5** |
+| 5 | 10 | **11** (Remote payment accepted) |
+
+Historia zamówień również przemapowana (statusy 2, 5, 7, 11). Przewoźnicy
+dostali strefy 3 „Asia" i 5 „Oceania", cennik dostaw także — zgodnie z mapą.
+
+### Źródło multistore
+
+Źródło przestawione na multistore, drugi sklep dostał **inne** dane dla tych
+samych produktów (cena 999,99 i nazwy z przedrostkiem „SKLEP2"). Migracja wzięła
+dane sklepu 1: cena 99,99, nazwa bez przedrostka, 20 wierszy `product_shop`
+tylko dla sklepu docelowego. Czyli zachowanie jest poprawne i powtarzalne —
+moduł czyta tabele per-sklep posortowane po `id_shop` i bierze pierwszy wiersz.
+
+Czego brakowało: **powiedzenia o tym użytkownikowi.** Test połączenia pokazuje
+teraz ostrzeżenie: *„The source is a multistore installation with 2 shops. Only
+the data of shop »PrestaShop« (id 1) will be migrated — the other shops are
+ignored."* Liczba sklepów źródła jest też zapisywana do raportów błędów.
+
+**Do decyzji.** Wybór sklepu źródłowego w kreatorze byłby lepszy od komunikatu,
+ale to nowe pole w interfejsie i nowe tłumaczenia, więc czeka na zgodę.
+
+### Encje, które wcześniej migrowały się „na pusto"
+
+Źródło miało po zero-jeden wierszy w opiniach, listach życzeń, korektach,
+ruchach magazynowych i wątkach klientów, więc te kroki nic nie robiły.
+Po dołożeniu danych wszystko przeniosło się co do wiersza: opinie 12, oceny 12,
+listy życzeń 3 wraz z 9 pozycjami, korekty 3 z 3 pozycjami, ruchy magazynowe 10,
+wątki 3 z 3 wiadomościami, załączniki 20.
+
+### Skala po wszystkich poprawkach, z plikami
+
+Przebieg na 2020 produktach, 4023 zdjęciach z prawdziwymi plikami i 200
+załącznikach, przez panel, z limitem 30 s: **813 partii, 510 s, zero błędów,
+najdłuższe żądanie 1,59 s.**
