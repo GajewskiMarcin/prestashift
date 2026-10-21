@@ -386,6 +386,176 @@ class IdMapper
         self::$allocated = [];
         self::$dict = [];
         self::$warned = [];
+
+        self::adoptLegacyIds();
+    }
+
+    /**
+     * Takes over the records of a migration made before this map existed.
+     *
+     * Until 1.3.0 a migration copied the source ids as they were. The map knows
+     * nothing about those records, so a later run would compute an offset from
+     * the highest id in the target and give every source record a fresh number
+     * — writing a second copy of the whole catalogue instead of updating it.
+     * That is what happened to a shop that migrated a month earlier and then
+     * ran an update: 3009 categories became 5807.
+     *
+     * So before the first allocation for a source, check whether this target
+     * already holds that source's records under their own ids, and if it does,
+     * write the map as 1:1 and keep the offsets at zero. The check is evidence
+     * based: products (categories as a fallback) at the same id have to match
+     * on date_add, and on reference when the source has one. A target shop with
+     * its own, unrelated records at those ids fails the check, so nothing is
+     * adopted and nothing of the shop's own is overwritten.
+     */
+    private static function adoptLegacyIds()
+    {
+        if (!self::$conn) {
+            return;
+        }
+
+        // Only ever for a source this map has never seen.
+        $seen = (int) Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . self::MAP_TABLE . "`
+            WHERE `source` = '" . pSQL(self::$source) . "'", false);
+        $seen += (int) Db::getInstance()->getValue('SELECT COUNT(*) FROM `' . _DB_PREFIX_ . self::OFFSET_TABLE . "`
+            WHERE `source` = '" . pSQL(self::$source) . "'", false);
+        if ($seen > 0) {
+            return;
+        }
+        // A target that is about to be emptied needs no adoption.
+        if (!empty(self::$options['clean_target'])) {
+            return;
+        }
+
+        if (!self::looksLikeOwnMigration('product') && !self::looksLikeOwnMigration('category')) {
+            return;
+        }
+
+        $log = LogService::getInstance();
+        $adopted = [];
+        foreach (array_keys(self::$entities) as $entity) {
+            if (in_array($entity, self::$dictionaries, true)) {
+                continue;
+            }
+            $count = self::adoptEntity($entity);
+            if ($count > 0) {
+                $adopted[$entity] = $count;
+            }
+        }
+
+        if (empty($adopted)) {
+            return;
+        }
+
+        $parts = [];
+        foreach ($adopted as $entity => $count) {
+            $parts[] = "$entity=$count";
+        }
+        $log->info('Records of an earlier migration adopted under their existing ids ('
+            . implode(', ', $parts) . '). This run updates them instead of adding copies.');
+    }
+
+    /**
+     * Does the target hold this source's records under the same ids?
+     */
+    private static function looksLikeOwnMigration($entity)
+    {
+        list($table, $pk) = self::tableOf($entity);
+        $hasReference = $entity === 'product';
+
+        try {
+            $columns = $hasReference ? "`$pk`, `date_add`, `reference`" : "`$pk`, `date_add`";
+            $rows = self::$conn->query("SELECT $columns FROM `" . self::$prefix . $table . "`
+                ORDER BY `$pk` DESC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Exception $e) {
+            return false;
+        }
+        if (count($rows) < 5) {
+            return false; // too little to judge
+        }
+
+        $checked = 0;
+        $matched = 0;
+        foreach ($rows as $row) {
+            $id = (int) $row[$pk];
+            $target = Db::getInstance()->getRow('SELECT * FROM `' . _DB_PREFIX_ . bqSQL($table) . "`
+                WHERE `" . bqSQL($pk) . "` = $id", false);
+            if (!$target) {
+                continue;
+            }
+            ++$checked;
+            $same = isset($target['date_add']) && (string) $target['date_add'] === (string) $row['date_add'];
+            if ($same && $hasReference && (string) $row['reference'] !== '') {
+                $same = (string) $target['reference'] === (string) $row['reference'];
+            }
+            if ($same) {
+                ++$matched;
+            }
+        }
+
+        // Nearly all of the sampled records have to be the source's own.
+        return $checked >= 5 && $matched >= (int) ceil($checked * 0.9);
+    }
+
+    /**
+     * Writes 1:1 map rows for every id of this entity that exists on both sides.
+     */
+    private static function adoptEntity($entity)
+    {
+        list($table, $pk) = self::tableOf($entity);
+
+        try {
+            // By name, not by position: the bridge returns associative rows.
+            $sourceRows = self::$conn->query('SELECT `' . $pk . '` FROM `' . self::$prefix . $table . '`')
+                ->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Exception $e) {
+            return 0;
+        }
+        if (empty($sourceRows)) {
+            return 0;
+        }
+        $sourceIds = [];
+        foreach ($sourceRows as $row) {
+            $sourceIds[] = isset($row[$pk]) ? $row[$pk] : reset($row);
+        }
+
+        $targetIds = [];
+        try {
+            foreach ((array) Db::getInstance()->executeS('SELECT `' . bqSQL($pk) . '` AS id
+                FROM `' . _DB_PREFIX_ . bqSQL($table) . '`') as $row) {
+                $targetIds[(int) $row['id']] = true;
+            }
+        } catch (\Exception $e) {
+            return 0;
+        }
+
+        $values = [];
+        foreach ($sourceIds as $sourceId) {
+            $id = (int) $sourceId;
+            if ($id > 0 && isset($targetIds[$id])) {
+                $values[] = "('" . pSQL(self::$source) . "', '" . pSQL($entity) . "', $id, $id, 0)";
+            }
+        }
+        if (empty($values)) {
+            return 0;
+        }
+
+        $written = 0;
+        foreach (array_chunk($values, 500) as $chunk) {
+            if (!Db::getInstance()->execute('INSERT IGNORE INTO `' . _DB_PREFIX_ . self::MAP_TABLE . '`
+                (`source`, `entity`, `source_id`, `target_id`, `linked`) VALUES ' . implode(',', $chunk))) {
+                // Say so instead of reporting an intention as a result.
+                LogService::getInstance()->error("Adopting existing ids of $entity failed while writing the id map.");
+
+                return 0;
+            }
+            $written += (int) Db::getInstance()->Affected_Rows();
+        }
+        // Ids stay as they are, so this entity is numbered 1:1 from now on.
+        Db::getInstance()->execute('INSERT IGNORE INTO `' . _DB_PREFIX_ . self::OFFSET_TABLE . "`
+            (`source`, `entity`, `offset_value`) VALUES ('" . pSQL(self::$source) . "', '" . pSQL($entity) . "', 0)");
+
+        return $written;
     }
 
     /**

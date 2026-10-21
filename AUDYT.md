@@ -492,3 +492,65 @@ sprawdzony w obecnym kodzie:
 | K10 | przełącznik „Wymuś zachowanie ID" nic nie robił | zamknięty | w kodzie nie ma już żadnego odwołania |
 | K11 | siedem tabel w ogóle nieprzenoszonych (rabaty w zamówieniach, podatki pozycji i faktur, produkty powiązane, przewoźnicy produktów, ograniczenia kuponów, zwroty) | zamknięty | każda obsługiwana: `order_cart_rule`, `order_detail_tax`, `order_return` w kroku zamówień, `order_invoice_tax` w kroku płatności, `accessory` w kroku produktów, `product_carrier` w kroku przewoźników, `cart_rule_country` i pozostałe ograniczenia w kroku kuponów |
 | K12 | mapa przekierowań 301 porównywała produkty po tym samym numerze w obu sklepach | zamknięty | `RedirectMapService` tłumaczy numer przez `IdMapper::find('product', …)` |
+
+---
+
+## A14. Regresja z 1.3.0: aktualizacja po migracji zrobionej starszą wersją
+
+**Zgłoszenie.** Użytkowniczka napisała, że migrację z tego samego sklepu zrobiła
+miesiąc wcześniej i przeszła dobrze, a teraz, chcąc dociągnąć nowe zamówienia,
+klientów i produkty, dostaje błędy, choć niczego nie zmieniała.
+
+**Co się dzieje.** Do wersji 1.3.0 migracja kopiowała numery źródła bez żadnej
+mapy. Mapa ID wprowadzona w 1.3.0 nic o tych rekordach nie wie, a
+`IdMapper::offset()` przy pustej mapie bierze `MAX(id)` z nowego sklepu jako
+offset. Czyli kolejny przebieg nadaje każdemu rekordowi numer `źródło + MAX` i
+**zapisuje drugą kopię całego katalogu zamiast go zaktualizować.**
+
+**Potwierdzenie testem.** Sklep docelowy z 3009 kategoriami i 2020 produktami
+zmigrowanymi 1:1, mapa ID wyczyszczona (dokładnie stan sklepu po migracji
+sprzed 1.3.0), następnie przebieg przyrostowy bez czyszczenia:
+
+| | przed poprawką | po poprawce |
+|---|---|---|
+| kategorie (było 3009) | 6016 | **3009** |
+| produkty (było 2020) | 4039 | **2020** |
+| kombinacje (było 6039) | 7088 | **6039** |
+| najwyższy numer kategorii (w źródle 22999) | 26006 | **22999** |
+| mapa ID | 6960 wpisów, 642 jako 1:1 | **21771 wpisów, wszystkie 1:1** |
+
+Po przyjęciu numerów dane nadal zgadzają się ze źródłem (weryfikacja pól na
+próbce z każdej encji: zero rozbieżności).
+
+**Działanie.** `IdMapper::adoptLegacyIds()` przy pierwszym uruchomieniu dla
+danego źródła, gdy mapa jest pusta i użytkownik nie zaznaczył czyszczenia,
+sprawdza dowodowo, czy nowy sklep już zawiera rekordy tego źródła pod ich
+własnymi numerami: pobiera 50 produktów (w razie potrzeby kategorii) i porównuje
+`date_add`, a dla produktów też `reference`. Przy zgodności co najmniej 90%
+zapisuje mapę jako 1:1 i zostawia offsety na zerze. Gdy dowody nie wychodzą, nie
+robi nic — sklep z własnymi rekordami pod tymi numerami nie zostanie nadpisany.
+
+**To jest moja regresja**, wprowadzona razem z mapą ID w 1.3.0. Timeouty, które
+ta sama użytkowniczka zgłaszała wcześniej, to osobna sprawa i pochodzą z
+wzorca czytania obecnego od 1.0.0 (A1, A9, A10).
+
+---
+
+## A15. Dwa błędy w moim własnym kodzie, znalezione przy naprawianiu A14
+
+**1. `ConnectorResult::fetchAll($mode)` ignorował tryb.** Zawsze zwracał wiersze
+jako tablice asocjacyjne, niezależnie od tego, o co pytał wywołujący. Moje
+pierwsze podejście do adopcji użyło `PDO::FETCH_COLUMN`, dostało tablice,
+rzutowanie `(int)` dało z nich `1`, i na encję trafiał jeden wiersz mapy zamiast
+tysięcy. Poprawione: tryby `FETCH_COLUMN` i `FETCH_NUM` są obsługiwane, bo
+cicha podmiana wyniku na inny niż zamówiony to pułapka dla każdego następnego
+kawałka kodu.
+
+**2. `adoptEntity()` raportował zamiar, nie skutek.** Zwracał liczbę
+przygotowanych wierszy, nie sprawdzając, czy `INSERT` się wykonał — dlatego
+dziennik twierdził „przyjęto 3009 kategorii", gdy w mapie było ich kilkadziesiąt.
+Teraz sprawdza wynik zapytania, liczy `Affected_Rows()` i przy porażce zapisuje
+błąd w dzienniku.
+
+Oba błędy były moje i oba znalazły się tylko dlatego, że test porównywał liczby
+wierszy w bazie, a nie treść komunikatu modułu.

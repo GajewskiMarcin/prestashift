@@ -27,6 +27,29 @@ class ConnectorResult
 
     public function fetchAll($mode = null)
     {
+        // The mode used to be ignored, which is a quiet way to hand back
+        // something other than what the caller asked for: FETCH_COLUMN then
+        // returned whole rows, and casting those to int gave 1 for every
+        // record. Code that reads a single column this way is normal, so the
+        // modes this module uses are honoured here.
+        if ($mode === \PDO::FETCH_COLUMN) {
+            $out = [];
+            foreach ($this->data as $row) {
+                $values = array_values((array) $row);
+                $out[] = isset($values[0]) ? $values[0] : null;
+            }
+
+            return $out;
+        }
+        if ($mode === \PDO::FETCH_NUM) {
+            $out = [];
+            foreach ($this->data as $row) {
+                $out[] = array_values((array) $row);
+            }
+
+            return $out;
+        }
+
         return $this->data;
     }
 
