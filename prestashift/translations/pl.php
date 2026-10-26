@@ -289,6 +289,10 @@ $translations = array(
     'Same major version detected — minimal compatibility issues expected.' => 'Wykryto tę samą wersję główną — minimalne problemy z kompatybilnością.',
     'WARNING: Source version is newer than target. Downgrade migration may cause data loss.' => 'UWAGA: Wersja źródłowa jest nowsza niż docelowa. Migracja wsteczna może powodować utratę danych.',
     'connected! Prefix detected:' => 'połączono! Wykryty prefiks:',
+    'The table prefix may only contain letters, digits and underscores.' => 'Prefiks tabel może zawierać tylko litery, cyfry i podkreślenia.',
+    'The source shop uses the table prefix "%1$s", not "%2$s". Correct the prefix and test again.' => 'Sklep źródłowy używa prefiksu tabel "%1$s", a nie "%2$s". Popraw prefiks i przetestuj ponownie.',
+    'The source database has no PrestaShop tables with the prefix "%1$s". Prefixes found there: %2$s. Correct the prefix and test again.' => 'Źródłowa baza danych nie ma tabel PrestaShop z prefiksem "%1$s". Znalezione prefiksy: %2$s. Popraw prefiks i przetestuj ponownie.',
+    'The source database has no PrestaShop tables with the prefix "%s". Check the prefix and the database name.' => 'Źródłowa baza danych nie ma tabel PrestaShop z prefiksem "%s". Sprawdź prefiks i nazwę bazy danych.',
 
     // === Connection step ===
     'Bridge Connector' => 'Konektor mostkowy',
