@@ -4,6 +4,8 @@
  * 
  * @author    marcingajewski.pl <kontakt@marcingajewski.pl>
  * @copyright 2026 marcingajewski.pl
+ * Modifié par : Thierry Laval <contact@thierrylaval.dev>
+ * @copyright 2026 Thierry Laval
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
  * @version   1.3.0
  */

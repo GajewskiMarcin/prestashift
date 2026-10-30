@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="AUDYT.md">English</a> ·
+  <a href="translations/AUDYT.fr.md">Français</a> ·
+  <a href="translations/AUDYT.de.md">Deutsch</a> ·
+  <a href="translations/AUDYT.es.md">Español</a> ·
+  <a href="translations/AUDYT.pt.md">Português</a> ·
+  <a href="translations/AUDYT.it.md">Italiano</a> ·
+</p>
+
 # Audyt PrestaShift
 
 Każda pozycja ma tę samą budowę: **co mówi dokumentacja PrestaShop** (z adresem

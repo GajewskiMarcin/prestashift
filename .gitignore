@@ -1,10 +1,10 @@
 .DS_Store
 Thumbs.db
 
-# Migration logs pulled off a shop for debugging — never part of the module
+# Journaux de migration récupérés sur une boutique pour le débogage — ne font jamais partie du module
 *.log
 
-# Temp/build files
+# Fichiers temporaires / de build
 *.ps1
 *.csv
 *.json

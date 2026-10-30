@@ -1,6 +1,45 @@
-# PrestaShift — PrestaShop Migration Module
+<p align="center">
+  <img src="../assets/icon-256.png" alt="PrestaShift" title="PrestaShift" width="128" height="128">
+</p>
 
-Professional data migration tool for PrestaShop. Migrate your shop data between PrestaShop 1.7, 8, and 9 with ease.
+<h1 align="center">PrestaShift</h1>
+
+<p align="center">
+  <strong>PrestaShop Migration Module</strong>
+  <br>
+  <strong>Simple · Elegant · Efficient</strong>
+  <br>
+  <a href="https://github.com/GajewskiMarcin/prestashift/releases">Download</a> ·
+  <a href="#">Product page</a>
+</p>
+
+<p align="center">
+  <a href="README.md">English</a> ·
+  <a href="translations/README.fr.md">Français</a> ·
+  <a href="translations/README.de.md">Deutsch</a> ·
+  <a href="translations/README.es.md">Español</a> ·
+  <a href="translations/README.pt.md">Português</a> ·
+  <a href="translations/README.it.md">Italiano</a> ·
+</p>
+
+> **One module.** A professional data migration tool for PrestaShop. Easily migrate your store data between PrestaShop 1.7, 8 and 9.
+
+<p align="center">
+  <img src="https://img.shields.io/badge/PrestaShop-1.7%2B-DF0067?logo=prestashop&logoColor=white" alt="PrestaShop 1.7+">
+  <img src="https://img.shields.io/badge/PHP-7.4%2B-777BB4?logo=php&logoColor=white" alt="PHP 7.4+">
+  <img src="https://img.shields.io/badge/MySQL-5.7%2B-4479A1?logo=mysql&logoColor=white" alt="MySQL 5.7+">
+  <img src="https://img.shields.io/badge/MariaDB-10.3%2B-003545?logo=mariadb&logoColor=white" alt="MariaDB 10.3+">
+  <img src="https://img.shields.io/badge/license-AFL--3.0-orange.svg" alt="Academic Free License 3.0 (AFL-3.0)">
+</p>
+
+**The PrestaShift project is a data migration module for PrestaShop.**
+
+**In short:** it allows you to migrate data from an older PrestaShop store (1.7+) to a newer store (8 or 9), in batches, with resumable transfers, logging and a preview before migration.
+
+Two-part architecture:
+
+- **Source (old store)** → PSConnector module (read-only, token-secured API)
+- **Target (new store)** → PrestaShift module (migration engine)
 
 ## Features
 
@@ -117,15 +156,28 @@ Created by [marcingajewski.pl](https://marcingajewski.pl)
 
 ### Attribution Notice
 
-The following is an **Attribution Notice** under section 6 of the AFL-3.0. Section 6 requires
-every derivative work to retain it:
+The following is an **Attribution Notice** under Section 6 of the AFL-3.0. Section 6 requires that all derivative works retain it:
 
-> PrestaShift was created by Marcin Gajewski — https://marcingajewski.pl
-> Original project: https://github.com/GajewskiMarcin/prestashift
-> Support the work: https://buymeacoffee.com/marcingajewski
+> PrestaShift was created by Marcin Gajewski — [https://marcingajewski.pl](https://marcingajewski.pl)
+> Original project: [https://github.com/GajewskiMarcin/prestashift](https://github.com/GajewskiMarcin/prestashift)
+> Support the work: [https://buymeacoffee.com/marcingajewski](https://buymeacoffee.com/marcingajewski)
 >
-> Derivative works and forks must keep this notice, the author credit, and the support link shown
-> on the module's final screen. "PrestaShift" is the name of the original module: if you publish a
+> Derivative works and forks must retain this notice, the author credit, and the support link displayed
+> on the module's final screen. “PrestaShift” is the name of the original module: if you publish a
 > modified version, please give it your own name.
 
-Forks are welcome — fixes sent back as pull requests reach every user of the module.
+Forks are welcome — fixes submitted as pull requests benefit all module users.
+
+Contributions go through pull requests to `main`.
+
+### Acknowledgments
+
+PrestaShift is improved by these people:
+
+| Who | Contribution |
+|---|---|
+| @xxxxxx | xxxxxxx |
+| @xxxxxx | xxxxxxx |
+| @xxxxxx | xxxxxxx |
+
+The same list is available in the module: **Settings → About → Thanks**
