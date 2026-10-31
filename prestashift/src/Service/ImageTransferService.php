@@ -11,14 +11,15 @@
 namespace PrestaShift\Service;
 
 use Tools;
+use PrestaShift\Service\DirectDbClient;
 
 class ImageTransferService
 {
-    private $bridgeClient;
+    private $fileClient;
 
-    public function __construct($bridgeClient = null)
+    public function __construct($fileClient = null)
     {
-        $this->bridgeClient = $bridgeClient;
+        $this->fileClient = $fileClient;
     }
 
     /**
@@ -35,8 +36,10 @@ class ImageTransferService
             return false;
         }
 
-        if ($this->bridgeClient) {
-            $content = $this->bridgeClient->getFile("img/p/$sourceFolder/$sourceImageId.jpg");
+        if ($this->fileClient) {
+            $content = $this->fileClient instanceof DirectDbClient
+                ? $this->fileClient->getFile("img/p/$sourceFolder/$sourceImageId.jpg", "$sourceImageId.jpg")
+                : $this->fileClient->getFile("img/p/$sourceFolder/$sourceImageId.jpg");
         } else {
             $content = Tools::file_get_contents(rtrim($sourceUrl, '/') . "/img/p/$sourceFolder/$sourceImageId.jpg");
         }

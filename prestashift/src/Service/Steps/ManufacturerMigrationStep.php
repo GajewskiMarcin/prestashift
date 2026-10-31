@@ -12,6 +12,8 @@ namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\ConnectorClient;
+use PrestaShift\Service\DirectDbClient;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
@@ -119,7 +121,13 @@ class ManufacturerMigrationStep
         $targetPath = $manuDir . $tid . '.jpg';
         $imagesTypes = \ImageType::getImagesTypes('manufacturers');
 
-        $content = @\Tools::file_get_contents(rtrim($this->source_url, '/') . "/img/m/{$sid}.jpg");
+        if ($this->db_connection instanceof ConnectorClient || $this->db_connection instanceof DirectDbClient) {
+            $content = $this->db_connection instanceof DirectDbClient
+                ? $this->db_connection->getFile("img/m/{$sid}.jpg", "{$sid}.jpg")
+                : $this->db_connection->getFile("img/m/{$sid}.jpg");
+        } else {
+            $content = @\Tools::file_get_contents(rtrim($this->source_url, '/') . "/img/m/{$sid}.jpg");
+        }
         if (!$content || !@getimagesizefromstring($content)) {
             return; // no logo (or a 404 page) — keep whatever the target has
         }

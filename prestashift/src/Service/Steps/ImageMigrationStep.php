@@ -37,8 +37,9 @@ class ImageMigrationStep
         $this->source_url = $source_url;
         $this->skip_files = $skip_files;
 
-        $bridge = ($db_connection instanceof \PrestaShift\Service\ConnectorClient) ? $db_connection : null;
-        $this->transferService = new ImageTransferService($bridge);
+        $fileClient = ($db_connection instanceof \PrestaShift\Service\ConnectorClient
+            || $db_connection instanceof \PrestaShift\Service\DirectDbClient) ? $db_connection : null;
+        $this->transferService = new ImageTransferService($fileClient);
     }
 
     public function process($offset, $limit, $dateFilter = null)

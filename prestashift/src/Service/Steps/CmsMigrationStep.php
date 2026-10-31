@@ -12,8 +12,10 @@ namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\DirectDbClient;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
+use PrestaShift\Service\LogService;
 use PrestaShift\Service\SchemaHelper;
 use PrestaShift\Service\SourceBatch;
 
@@ -183,20 +185,36 @@ class CmsMigrationStep
             }
 
             try {
-                $fileData = $this->db_connection->getFile('img/cms/' . $filename);
+                $fileData = $this->db_connection instanceof DirectDbClient
+                    ? $this->db_connection->getFile('img/cms/' . $filename, $filename)
+                    : $this->db_connection->getFile('img/cms/' . $filename);
                 if ($fileData) {
-                    @file_put_contents($targetPath, $fileData);
+                    if (@file_put_contents($targetPath, $fileData) === false) {
+                        LogService::getInstance()->warning("CMS image $filename could not be written to the target shop.");
+                    }
                     continue;
                 }
-            } catch (\Exception $e) {}
+            } catch (\Exception $e) {
+                LogService::getInstance()->warning("CMS image $filename could not be fetched: " . $e->getMessage());
+            }
 
-            if ($this->source_url) {
+            if ($this->db_connection instanceof DirectDbClient) {
+                LogService::getInstance()->warning(
+                    "CMS image $filename was not downloaded in Direct DB mode. The source file must be reachable over HTTPS."
+                );
+            }
+
+            if ($this->source_url && !($this->db_connection instanceof DirectDbClient)) {
                 try {
                     $fileData = @file_get_contents($this->source_url . '/img/cms/' . $filename);
                     if ($fileData) {
-                        @file_put_contents($targetPath, $fileData);
+                        if (@file_put_contents($targetPath, $fileData) === false) {
+                            LogService::getInstance()->warning("CMS image $filename could not be written to the target shop.");
+                        }
                     }
-                } catch (\Exception $e) {}
+                } catch (\Exception $e) {
+                    LogService::getInstance()->warning("CMS image $filename could not be fetched: " . $e->getMessage());
+                }
             }
         }
     }

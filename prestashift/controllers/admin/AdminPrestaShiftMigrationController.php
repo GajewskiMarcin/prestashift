@@ -897,11 +897,21 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
     {
         ob_start();
         try {
+            $method = Tools::getValue('connection_method', 'bridge');
             $config = [
-                'bridge_token' => Tools::getValue('bridge_token'),
+                'connection_method' => $method,
                 'source_url' => \PrestaShift\Service\ConnectorClient::shopUrl(Tools::getValue('source_url')),
                 'db_prefix' => Tools::getValue('db_prefix', 'ps_')
             ];
+            if ($method === 'direct') {
+                $config['db_host'] = Tools::getValue('db_host', 'localhost');
+                $config['db_port'] = (int)Tools::getValue('db_port', 3306);
+                $config['db_name'] = Tools::getValue('db_name');
+                $config['db_user'] = Tools::getValue('db_user');
+                $config['db_pass'] = Tools::getValue('db_pass', '');
+            } else {
+                $config['bridge_token'] = Tools::getValue('bridge_token');
+            }
 
             $manager = new \PrestaShift\Service\MigrationManager();
             $conn = $manager->getConnection($config);

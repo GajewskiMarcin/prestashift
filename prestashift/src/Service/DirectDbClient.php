@@ -75,17 +75,67 @@ class DirectDbClient
     }
 
     /**
-     * Fetch file from source shop via HTTP
+     * Fetch a source file over verified HTTPS.
      */
-    public function getFile($path)
+    public function getFile($path, $expectedFilename = null)
     {
-        try {
-            if ($this->source_url) {
-                return @file_get_contents($this->source_url . '/' . ltrim($path, '/'));
-            }
-            return false;
-        } catch (Exception $e) {
+        $parts = parse_url($this->source_url);
+        if (!$parts || !isset($parts['scheme'], $parts['host'])
+            || strtolower($parts['scheme']) !== 'https'
+            || isset($parts['user']) || isset($parts['pass'])
+            || isset($parts['query']) || isset($parts['fragment'])) {
             return false;
         }
+
+        $path = ltrim((string)$path, '/');
+        if (strpos($path, "\0") !== false
+            || !preg_match('#^(?:img|download|upload)/#', $path)
+            || preg_match('#(?:^|/)\.\.?(/|$)#', $path)) {
+            return false;
+        }
+
+        $urlPath = implode('/', array_map('rawurlencode', explode('/', $path)));
+        $url = rtrim($this->source_url, '/') . '/' . $urlPath;
+        $curl = curl_init($url);
+        if ($curl === false) {
+            return false;
+        }
+
+        $optionsSet = curl_setopt_array($curl, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 5,
+            CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 30,
+        ]);
+        if (!$optionsSet) {
+            curl_close($curl);
+            return false;
+        }
+
+        $content = curl_exec($curl);
+        $httpCode = (int)curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $contentType = strtolower((string)curl_getinfo($curl, CURLINFO_CONTENT_TYPE));
+        curl_close($curl);
+
+        if ($content === false || $content === '' || $httpCode < 200 || $httpCode >= 300) {
+            return false;
+        }
+
+        $extension = strtolower(pathinfo((string)($expectedFilename ?: basename($path)), PATHINFO_EXTENSION));
+        $isHtmlFile = in_array($extension, ['html', 'htm', 'xhtml'], true);
+        $bodyPrefix = ltrim(substr($content, 0, 512), "\xEF\xBB\xBF \t\n\r\0\x0B");
+        $looksLikeHtml = preg_match('/^(?:<!doctype\s+html\b|<html\b|<head\b|<body\b)/i', $bodyPrefix);
+        if (!$isHtmlFile && ($looksLikeHtml
+            || strpos($contentType, 'text/html') === 0
+            || strpos($contentType, 'application/xhtml+xml') === 0)) {
+            return false;
+        }
+
+        return $content;
     }
 }
