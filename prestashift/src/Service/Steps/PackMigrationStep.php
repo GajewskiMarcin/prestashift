@@ -28,13 +28,9 @@ class PackMigrationStep
 
     public function process($offset, $limit, $dateFilter = null)
     {
-        try {
-            $sql = "SELECT * FROM `{$this->prefix}pack` ORDER BY id_product_pack ASC, id_product_item ASC, id_product_attribute_item ASC LIMIT $limit OFFSET $offset";
-            $stmt = $this->db_connection->query($sql);
-            $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Exception $e) {
-            return ['count' => 0, 'finished' => true];
-        }
+        $sql = "SELECT * FROM `{$this->prefix}pack` ORDER BY id_product_pack ASC, id_product_item ASC, id_product_attribute_item ASC LIMIT $limit OFFSET $offset";
+        $stmt = $this->db_connection->query($sql);
+        $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         if (empty($items)) {
             return ['count' => 0, 'finished' => true];

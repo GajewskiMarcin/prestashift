@@ -44,11 +44,7 @@ class MetaMigrationStep
             return ['count' => 0, 'finished' => true];
         }
 
-        try {
-            $items = $this->db_connection->query("SELECT * FROM `{$this->prefix}meta` ORDER BY id_meta ASC")->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Exception $e) {
-            return ['count' => 0, 'finished' => true];
-        }
+        $items = $this->db_connection->query("SELECT * FROM `{$this->prefix}meta` ORDER BY id_meta ASC")->fetchAll(PDO::FETCH_ASSOC);
 
         $overwrite = (bool)IdMapper::option('clean_target');
 

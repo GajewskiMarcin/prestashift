@@ -84,13 +84,9 @@ class ConfigurationMigrationStep
     {
         $keysIn = implode("','", array_map('pSQL', self::$safeKeys));
 
-        try {
-            // The shop-independent value first; one value per key
-            $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}configuration` WHERE `name` IN ('{$keysIn}')
-                ORDER BY (`id_shop` IS NULL) DESC, (`id_shop_group` IS NULL) DESC, `id_configuration` ASC")->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Exception $e) {
-            return ['count' => 0, 'finished' => true];
-        }
+        // The shop-independent value first; one value per key
+        $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}configuration` WHERE `name` IN ('{$keysIn}')
+            ORDER BY (`id_shop` IS NULL) DESC, (`id_shop_group` IS NULL) DESC, `id_configuration` ASC")->fetchAll(PDO::FETCH_ASSOC);
 
         $seen = [];
         $imported = 0;

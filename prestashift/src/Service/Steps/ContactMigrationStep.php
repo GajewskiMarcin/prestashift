@@ -35,11 +35,7 @@ class ContactMigrationStep
     {
         // One-shot migration — small data set
         if ($offset == 0) {
-            try {
-                $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}contact` ORDER BY `id_contact` ASC")->fetchAll(PDO::FETCH_ASSOC);
-            } catch (\Exception $e) {
-                return ['count' => 0, 'finished' => true];
-            }
+            $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}contact` ORDER BY `id_contact` ASC")->fetchAll(PDO::FETCH_ASSOC);
 
             // One query for the whole batch instead of one per record
             $this->langRows = SourceBatch::grouped($this->db_connection,

@@ -32,11 +32,7 @@ class OrderSlipMigrationStep
 
     public function process($offset, $limit, $dateFilter = null)
     {
-        try {
-            $slips = $this->getSlipsFromSource($offset, $limit, $dateFilter);
-        } catch (\Exception $e) {
-            return ['count' => 0, 'finished' => true];
-        }
+        $slips = $this->getSlipsFromSource($offset, $limit, $dateFilter);
 
         if (empty($slips)) {
             return ['count' => 0, 'finished' => true];

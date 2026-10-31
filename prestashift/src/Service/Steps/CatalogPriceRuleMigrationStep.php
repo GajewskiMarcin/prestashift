@@ -43,11 +43,7 @@ class CatalogPriceRuleMigrationStep
 
     public function process($offset, $limit, $dateFilter = null)
     {
-        try {
-            $items = $this->db_connection->query("SELECT * FROM `{$this->prefix}specific_price_rule` ORDER BY `id_specific_price_rule` ASC LIMIT $limit OFFSET $offset")->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Exception $e) {
-            return ['count' => 0, 'finished' => true];
-        }
+        $items = $this->db_connection->query("SELECT * FROM `{$this->prefix}specific_price_rule` ORDER BY `id_specific_price_rule` ASC LIMIT $limit OFFSET $offset")->fetchAll(PDO::FETCH_ASSOC);
 
         if (empty($items)) {
             return ['count' => 0, 'finished' => true];
@@ -114,14 +110,10 @@ class CatalogPriceRuleMigrationStep
      */
     private function loadConditions($sid)
     {
-        try {
-            $rows = $this->db_connection->query("SELECT g.id_specific_price_rule_condition_group AS gid, c.id_specific_price_rule_condition AS cid, c.type, c.value
-                FROM `{$this->prefix}specific_price_rule_condition_group` g
-                LEFT JOIN `{$this->prefix}specific_price_rule_condition` c ON c.id_specific_price_rule_condition_group = g.id_specific_price_rule_condition_group
-                WHERE g.id_specific_price_rule = $sid")->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Exception $e) {
-            return null;
-        }
+        $rows = $this->db_connection->query("SELECT g.id_specific_price_rule_condition_group AS gid, c.id_specific_price_rule_condition AS cid, c.type, c.value
+            FROM `{$this->prefix}specific_price_rule_condition_group` g
+            LEFT JOIN `{$this->prefix}specific_price_rule_condition` c ON c.id_specific_price_rule_condition_group = g.id_specific_price_rule_condition_group
+            WHERE g.id_specific_price_rule = $sid")->fetchAll(PDO::FETCH_ASSOC);
 
         $groups = [];
         foreach ($rows as $r) {

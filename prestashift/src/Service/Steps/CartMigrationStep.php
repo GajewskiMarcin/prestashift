@@ -31,11 +31,7 @@ class CartMigrationStep
 
     public function process($offset, $limit, $dateFilter = null)
     {
-        try {
-            $carts = $this->getCartsFromSource($offset, $limit, $dateFilter);
-        } catch (\Exception $e) {
-            return ['count' => 0, 'finished' => true];
-        }
+        $carts = $this->getCartsFromSource($offset, $limit, $dateFilter);
 
         if (empty($carts)) {
             return ['count' => 0, 'finished' => true];

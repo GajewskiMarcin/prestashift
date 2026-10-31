@@ -32,11 +32,7 @@ class StateMigrationStep
     public function process($offset, $limit, $dateFilter = null)
     {
         if ($offset == 0) {
-            try {
-                $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}state` ORDER BY `id_state` ASC")->fetchAll(PDO::FETCH_ASSOC);
-            } catch (\Exception $e) {
-                return ['count' => 0, 'finished' => true];
-            }
+            $rows = $this->db_connection->query("SELECT * FROM `{$this->prefix}state` ORDER BY `id_state` ASC")->fetchAll(PDO::FETCH_ASSOC);
 
             foreach ($rows as $row) {
                 $this->importState($row);

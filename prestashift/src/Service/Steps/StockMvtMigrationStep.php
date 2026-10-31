@@ -31,11 +31,7 @@ class StockMvtMigrationStep
 
     public function process($offset, $limit, $dateFilter = null)
     {
-        try {
-            $items = $this->getData($offset, $limit);
-        } catch (\Exception $e) {
-            return ['count' => 0, 'finished' => true];
-        }
+        $items = $this->getData($offset, $limit);
 
         if (empty($items)) {
             return ['count' => 0, 'finished' => true];
