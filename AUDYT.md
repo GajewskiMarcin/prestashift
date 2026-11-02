@@ -734,3 +734,50 @@ budując klucze dokładnie tak jak PrestaShop: **0 w każdym z sześciu językó
 (wcześniej 42). Drugi pyta o tłumaczenia **żywy sklep** przez
 `Translate::getModuleTranslation()` z językiem ustawionym na polski — wszystkie
 sprawdzone frazy wracają po polsku, w tym jedna z kontekstu szablonu.
+
+---
+
+## A19. PrestaShop 9.2.0 i tryb bezpośredni: trzy błędy znalezione po zgłoszeniu
+
+Użytkownik instalujący moduł na świeżym PrestaShop 9.2.0 dostał na pierwszym
+kroku kreatora komunikat „The shop gave no answer". Wersja 9.2 nie była wcześniej
+testowana (mieliśmy 1.7.8.9, 8.2.4, 9.0.3 i 9.1.0), a jego scenariusz —
+połączenie bezpośrednie do bazy, bez konektora — jest tym, który sami
+zarekomendowaliśmy.
+
+**1. Adres kontrolera budowany z ustawień sklepu, nie ze strony.** PrestaShop
+tworzy link do kontrolera z domeny i ustawienia SSL zapisanych w sklepie. Na
+świeżej instalacji otwieranej po `https` przy wyłączonym SSL w konfiguracji link
+wychodzi jako `http://`, a przeglądarka blokuje takie żądanie jako mieszaną treść
+**zanim je wyśle**. Stąd komunikat bez kodu HTTP i bez treści odpowiedzi — nie
+było żadnej odpowiedzi. Potwierdzone przez zgłaszającego: konsola pokazała
+dokładnie „Mixed Content", a włączenie SSL rozwiązało problem.
+
+Moduł nie powinien od tego zależeć: kreator kieruje teraz żądania pod ten sam
+adres, na którym jest otwarta strona. Gdy link i tak się zgadza, nic się nie
+zmienia.
+
+**2. Mapowanie statusów zamówień nie działało w trybie bezpośrednim.**
+`ajaxProcessgetSourceStatuses()` budował konfigurację zawsze pod konektor, więc
+przy połączeniu bezpośrednim ekran „Options" odpowiadał `403 Forbidden` z
+konektora, którego na tym sklepie w ogóle nie ma. Sąsiedni
+`ajaxProcessgetSourceZones()` robił to poprawnie — poprawione na ten sam wzór.
+
+**3. Każda migracja w trybie bezpośrednim padała na pierwszej partii przy
+włączonym trybie debugowania.** Kontroler czytał `$state['config']['use_bridge']`
+wprost, a ten klucz istnieje tylko w konfiguracji konektora. Powstawało
+ostrzeżenie „Undefined array key", które PrestaShop w trybie debugowania zamienia
+w błąd. Na sklepach bez debugowania przechodziło to niezauważone — i dlatego nie
+wyszło we wcześniejszych testach.
+
+**Weryfikacja na 9.2.0 (PHP 8.4.15), scenariusz jak u zgłaszającego:** wszystkie
+dziewięć akcji kreatora odpowiada poprawnie, pełna migracja w trybie
+bezpośrednim przeszła w 69 partiach bez błędu, wszystkie zadania końcowe
+wykonane, a dane zgodne ze źródłem na próbce z każdej encji. Panel tego sklepu
+jest polski, więc przy okazji potwierdziło się, że tłumaczenia z A18 działają na
+żywym sklepie.
+
+**Poprawka w testach.** Mój własny test punktów wejścia uznawał odpowiedź HTML za
+sukces, przez co pokazał „wszystko działa", gdy w rzeczywistości harness nie
+zalogował się i dostawał stronę logowania. Teraz akcja, która ma zwracać JSON, a
+zwraca HTML, jest liczona jako błąd.

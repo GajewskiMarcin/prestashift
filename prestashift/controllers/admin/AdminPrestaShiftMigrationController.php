@@ -800,7 +800,12 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         
         try {
             $manager = new \PrestaShift\Service\MigrationManager();
-            if (!is_array($state) || (!$state['config']['use_bridge'] && empty($state['config']['db_host']))) {
+            // "use_bridge" exists only in a connector configuration, so reading
+            // it directly raised "Undefined array key" on every direct database
+            // migration. With debug mode on, PrestaShop turns that warning into
+            // an error and the first batch died.
+            if (!is_array($state) || !isset($state['config'])
+                || (empty($state['config']['use_bridge']) && empty($state['config']['db_host']))) {
                  // Fallback info for debugging
                  $type = gettype($stateRaw);
                  throw new Exception("Invalid Migration State received. Config missing. Type: $type. Raw: " . substr(print_r($stateRaw, true), 0, 100));
@@ -897,11 +902,25 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
     {
         ob_start();
         try {
+            // The connection has to be built the way the user chose it. This
+            // handler used to assume the connector, so on a direct database
+            // connection the order status mapping answered "403 Forbidden"
+            // from a connector the shop does not even have installed.
+            $method = Tools::getValue('connection_method', 'bridge');
             $config = [
-                'bridge_token' => Tools::getValue('bridge_token'),
-                'source_url' => \PrestaShift\Service\ConnectorClient::shopUrl(Tools::getValue('source_url')),
-                'db_prefix' => Tools::getValue('db_prefix', 'ps_')
+                'connection_method' => $method,
+                'db_prefix' => Tools::getValue('db_prefix', 'ps_'),
+                'source_url' => \PrestaShift\Service\ConnectorClient::shopUrl(Tools::getValue('source_url', '')),
             ];
+            if ($method === 'direct') {
+                $config['db_host'] = Tools::getValue('db_host', 'localhost');
+                $config['db_port'] = (int) Tools::getValue('db_port', 3306);
+                $config['db_name'] = Tools::getValue('db_name');
+                $config['db_user'] = Tools::getValue('db_user');
+                $config['db_pass'] = Tools::getValue('db_pass', '');
+            } else {
+                $config['bridge_token'] = Tools::getValue('bridge_token');
+            }
 
             $manager = new \PrestaShift\Service\MigrationManager();
             $conn = $manager->getConnection($config);
