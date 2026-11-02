@@ -15,10 +15,40 @@ var PrestaShift = {
     },
 
     init: function () {
+        this.useSameOriginUrl();
         this.loadStep(this.currentStep);
         this.bindEvents();
         if (this.currentStep === 1) {
             this.checkSavedState();
+        }
+    },
+
+    /**
+     * Makes every request go to the address the browser is already on.
+     *
+     * PrestaShop builds the module's controller link from the domain and the
+     * SSL setting stored in the shop, and on a fresh install those often
+     * disagree with how the shop is actually being reached — most commonly the
+     * link comes out as http:// while the back office is open over https://.
+     * The browser then blocks the request as mixed content before it leaves the
+     * page, which arrives in the wizard as "the shop gave no answer" with no
+     * status and no body at all, because there genuinely was no answer.
+     *
+     * When the link already matches the page, nothing changes.
+     */
+    useSameOriginUrl: function () {
+        if (typeof controller_url !== 'string' || controller_url === '') {
+            return;
+        }
+        try {
+            var target = new URL(controller_url, window.location.href);
+            if (target.origin !== window.location.origin) {
+                target.protocol = window.location.protocol;
+                target.host = window.location.host;
+                controller_url = target.toString();
+            }
+        } catch (e) {
+            // Old browser without URL(): leave the link as the shop built it.
         }
     },
 
