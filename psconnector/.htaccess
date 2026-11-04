@@ -10,3 +10,16 @@
         Require all denied
     </IfModule>
 </FilesMatch>
+
+<Files "api.php">
+    # The parent modules/.htaccess blocks PHP files; this token-protected API
+    # must remain reachable by the migration module.
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Allow from all
+    </IfModule>
+
+    <IfModule mod_authz_core.c>
+        Require all granted
+    </IfModule>
+</Files>

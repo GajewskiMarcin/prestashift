@@ -5,7 +5,7 @@
  * @author    marcingajewski.pl <kontakt@marcingajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.3.0
+ * @version   1.3.1
  */
 
 // Prevent PrestaShop from redirecting based on domain mismatch
@@ -40,7 +40,7 @@ try {
         header('Content-Type: application/json');
         echo json_encode([
             'success' => true,
-            'version' => '1.3.0',
+            'version' => '1.3.1',
             'ps_version' => _PS_VERSION_,
             'php_version' => PHP_VERSION,
             'prefix' => _DB_PREFIX_,
