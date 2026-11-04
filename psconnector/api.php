@@ -85,14 +85,47 @@ try {
         //
         // So: one statement, it must be a SELECT, and the handful of SELECT
         // constructs that touch files, locks or the clock are refused.
+        $containsSqlComment = static function ($query, $backslashEscapes) {
+            $quote = null;
+            $length = strlen($query);
+            for ($i = 0; $i < $length; ++$i) {
+                $char = $query[$i];
+
+                if ($quote !== null) {
+                    if ($backslashEscapes && $quote !== '`' && $char === '\\' && $i + 1 < $length) {
+                        ++$i;
+                        continue;
+                    }
+                    if ($char === $quote) {
+                        if ($i + 1 < $length && $query[$i + 1] === $quote) {
+                            ++$i;
+                        } else {
+                            $quote = null;
+                        }
+                    }
+                    continue;
+                }
+
+                if ($char === "'" || $char === '"' || $char === '`') {
+                    $quote = $char;
+                    continue;
+                }
+
+                $next = $i + 1 < $length ? $query[$i + 1] : '';
+                if (($char === '/' && $next === '*')
+                    || $char === '#'
+                    || ($char === '-' && $next === '-' && $i + 2 < $length
+                        && (ord($query[$i + 2]) <= 32 || ord($query[$i + 2]) === 127))) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        if ($containsSqlComment($sql, true) || $containsSqlComment($sql, false)) {
+            throw new Exception('SQL comments are not allowed.');
+        }
+
         $candidate = ltrim($sql);
-        // Comments first, so /* */ or -- cannot hide the real first word.
-        do {
-            $before = $candidate;
-            $candidate = preg_replace('#^/\*.*?\*/#s', '', $candidate);
-            $candidate = preg_replace('#^(--[^\n]*|\#[^\n]*)(\n|$)#', '', $candidate);
-            $candidate = ltrim($candidate);
-        } while ($candidate !== $before);
 
         if (!preg_match('/^SELECT\b/i', $candidate)) {
             throw new Exception('Only SELECT queries are allowed. The connector is read-only.');
