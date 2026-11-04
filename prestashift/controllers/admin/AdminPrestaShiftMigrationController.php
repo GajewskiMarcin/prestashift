@@ -224,6 +224,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                     'db_name' => Tools::getValue('db_name'),
                     'db_user' => Tools::getValue('db_user'),
                     'db_pass' => Tools::getValue('db_pass', ''),
+                    'db_ssl_ca' => Tools::getValue('db_ssl_ca', ''),
                     'db_prefix' => Tools::getValue('db_prefix', 'ps_'),
                     'source_url' => \PrestaShift\Service\ConnectorClient::shopUrl(Tools::getValue('source_url', '')),
                 ];
@@ -431,6 +432,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                 $config['db_name'] = Tools::getValue('db_name');
                 $config['db_user'] = Tools::getValue('db_user');
                 $config['db_pass'] = Tools::getValue('db_pass', '');
+                $config['db_ssl_ca'] = Tools::getValue('db_ssl_ca', '');
             } else {
                 $config['bridge_token'] = Tools::getValue('bridge_token');
             }
@@ -517,6 +519,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
             $config['db_name'] = Tools::getValue('db_name');
             $config['db_user'] = Tools::getValue('db_user');
             $config['db_pass'] = Tools::getValue('db_pass', '');
+            $config['db_ssl_ca'] = Tools::getValue('db_ssl_ca', '');
         } else {
             $config['use_bridge'] = 1;
             $config['bridge_token'] = Tools::getValue('bridge_token');
@@ -983,6 +986,7 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
                 $config['db_name'] = Tools::getValue('db_name');
                 $config['db_user'] = Tools::getValue('db_user');
                 $config['db_pass'] = Tools::getValue('db_pass', '');
+                $config['db_ssl_ca'] = Tools::getValue('db_ssl_ca', '');
             } else {
                 $config['bridge_token'] = Tools::getValue('bridge_token');
             }

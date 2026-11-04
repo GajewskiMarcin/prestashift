@@ -19,13 +19,40 @@ class DirectDbClient
     private $prefix;
     private $source_url;
 
-    public function __construct($host, $port, $dbname, $user, $pass, $prefix, $source_url = '')
+    public function __construct($host, $port, $dbname, $user, $pass, $prefix, $source_url = '', $sslCa = '')
     {
         $dsn = "mysql:host={$host};port={$port};dbname={$dbname};charset=utf8mb4";
-        $this->pdo = new PDO($dsn, $user, $pass);
-        $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $options = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION];
+
+        if (!$this->isLocalHost($host)) {
+            $sslCa = trim((string) $sslCa);
+            $isAbsolutePath = DIRECTORY_SEPARATOR === '\\'
+                ? (bool) preg_match('#^(?:[A-Za-z]:[\\\\/]|\\\\\\\\)#', $sslCa)
+                : isset($sslCa[0]) && $sslCa[0] === '/';
+            $resolvedCa = $isAbsolutePath ? realpath($sslCa) : false;
+            if ($resolvedCa === false || !is_file($resolvedCa) || !is_readable($resolvedCa)) {
+                throw new Exception('A readable SSL CA certificate file is required for remote database connections.');
+            }
+
+            if (class_exists('Pdo\\Mysql', false)) {
+                $options[constant('Pdo\\Mysql::ATTR_SSL_CA')] = $resolvedCa;
+                $options[constant('Pdo\\Mysql::ATTR_SSL_VERIFY_SERVER_CERT')] = true;
+            } elseif (defined('PDO::MYSQL_ATTR_SSL_CA') && defined('PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT')) {
+                $options[constant('PDO::MYSQL_ATTR_SSL_CA')] = $resolvedCa;
+                $options[constant('PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT')] = true;
+            } else {
+                throw new Exception('The PDO MySQL driver must support SSL certificate verification for remote database connections.');
+            }
+        }
+
+        $this->pdo = new PDO($dsn, $user, $pass, $options);
         $this->prefix = $prefix;
         $this->source_url = rtrim($source_url, '/');
+    }
+
+    private function isLocalHost($host)
+    {
+        return in_array(strtolower(trim((string) $host)), ['localhost', '127.0.0.1', '::1', '[::1]'], true);
     }
 
     /**

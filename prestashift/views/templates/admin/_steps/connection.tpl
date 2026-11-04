@@ -91,6 +91,7 @@
                 <div class="ps-space-y-2">
                     <label class="ps-font-medium ps-text-slate-700">{l s='Database Host' mod='prestashift'}</label>
                     <input type="text" name="db_host" class="ps-input" placeholder="localhost" required autocomplete="off">
+                    <p class="ps-text-xs ps-text-slate-500">{l s='Remote database connections require TLS and a readable CA certificate file on this server. Localhost connections do not use TLS.' mod='prestashift'}</p>
                 </div>
                 <div class="ps-space-y-2">
                     <label class="ps-font-medium ps-text-slate-700">{l s='Port' mod='prestashift'}</label>
@@ -112,6 +113,12 @@
                     <label class="ps-font-medium ps-text-slate-700">{l s='Database Password' mod='prestashift'}</label>
                     <input type="password" name="db_pass" class="ps-input" autocomplete="new-password">
                 </div>
+            </div>
+
+            <div class="ps-space-y-2" style="margin-top: 1.5rem;">
+                <label class="ps-font-medium ps-text-slate-700">{l s='SSL CA Certificate Path' mod='prestashift'}</label>
+                <input type="text" name="db_ssl_ca" class="ps-input" placeholder="/path/to/ca.pem" autocomplete="off">
+                <p class="ps-text-xs ps-text-slate-500">{l s='Absolute path to the trusted CA certificate file on the target server. Required for remote database hosts.' mod='prestashift'}</p>
             </div>
 
             <div class="ps-grid-2" style="margin-top: 1.5rem;">

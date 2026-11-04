@@ -155,7 +155,8 @@ class MigrationManager
                     $config['db_user'] ?? '',
                     $config['db_pass'] ?? '',
                     $config['db_prefix'] ?? 'ps_',
-                    ConnectorClient::shopUrl($config['source_url'] ?? '')
+                    ConnectorClient::shopUrl($config['source_url'] ?? ''),
+                    $config['db_ssl_ca'] ?? ''
                 );
             } else {
                 $endpoint = $config['bridge_url'] ?? '';

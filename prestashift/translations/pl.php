@@ -301,6 +301,9 @@ $translations = array(
     'Database Name' => 'Nazwa bazy danych',
     'Database User' => 'Użytkownik bazy danych',
     'Database Password' => 'Hasło bazy danych',
+    'SSL CA Certificate Path' => 'Ścieżka certyfikatu CA SSL',
+    'Absolute path to the trusted CA certificate file on the target server. Required for remote database hosts.' => 'Bezwzględna ścieżka do zaufanego pliku certyfikatu CA na serwerze docelowym. Wymagana dla zdalnych hostów baz danych.',
+    'Remote database connections require TLS and a readable CA certificate file on this server. Localhost connections do not use TLS.' => 'Połączenia ze zdalnymi bazami danych wymagają TLS i czytelnego pliku certyfikatu CA na tym serwerze. Połączenia localhost nie używają TLS.',
     'Port' => 'Port',
     'optional, for images' => 'opcjonalnie, dla obrazów',
 
