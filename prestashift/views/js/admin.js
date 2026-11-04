@@ -164,7 +164,7 @@ var PrestaShift = {
                     PrestaShift.targetVersion = response.target_version || 'unknown';
 
                     var msg = response.message + ' | ' + response.source_version + ' → ' + response.target_version;
-                    $.growl.notice({ title: PrestaShift.t('success'), message: msg });
+                    $.growl.notice({ title: PrestaShift.t('success'), message: PrestaShift.escapeHtml(msg) });
 
                     // Store warnings for display on step 2
                     PrestaShift.versionWarnings = response.warnings || [];
@@ -178,12 +178,12 @@ var PrestaShift = {
                     }, 500);
 
                 } else {
-                    $.growl.error({ title: PrestaShift.t('error'), message: response.message });
+                    $.growl.error({ title: PrestaShift.t('error'), message: PrestaShift.escapeHtml(response.message) });
                 }
             },
             error: function (jqXHR, textStatus, errorThrown) {
                 $btn.prop('disabled', false).html(PrestaShift.t('test_connection_btn'));
-                $.growl.error({ title: PrestaShift.t('connection_error'), message: textStatus + ': ' + errorThrown });
+                $.growl.error({ title: PrestaShift.t('connection_error'), message: PrestaShift.escapeHtml(textStatus + ': ' + errorThrown) });
                 console.error('Connection Check Failed:', jqXHR);
             }
         });
@@ -396,7 +396,7 @@ var PrestaShift = {
                 if (response.success) {
                     PrestaShift.renderZoneTable(response.source_zones, response.local_zones);
                 } else {
-                    $('#zone-mapping-table-container').html('<div class="alert alert-danger">' + (response.message || PrestaShift.t('error')) + '</div>');
+                    $('#zone-mapping-table-container').html('<div class="alert alert-danger">' + PrestaShift.escapeHtml(response.message || PrestaShift.t('error')) + '</div>');
                 }
             },
             error: function (jqXHR, textStatus) {
@@ -408,25 +408,28 @@ var PrestaShift = {
     renderZoneTable: function (sourceZones, localZones) {
         var html = '<div class="ps-space-y-2">';
         $.each(sourceZones, function (i, source) {
+            var sourceName = String(source.name == null ? '' : source.name);
+            var sourceId = PrestaShift.escapeHtml(source.id_zone);
             html += '<div class="ps-flex-between ps-p-3 ps-border ps-border-slate-200 ps-rounded-md ps-bg-slate-50">';
 
             html += '<div class="ps-flex-start ps-gap-2" style="flex: 1;">';
-            html += '<span class="ps-font-medium ps-text-slate-700">' + source.name + '</span>';
-            html += '<span class="ps-text-xs ps-text-slate-400">(ID: ' + source.id_zone + ')</span>';
+            html += '<span class="ps-font-medium ps-text-slate-700">' + PrestaShift.escapeHtml(sourceName) + '</span>';
+            html += '<span class="ps-text-xs ps-text-slate-400">(ID: ' + sourceId + ')</span>';
             html += '</div>';
 
             html += '<div class="ps-text-slate-400" style="padding: 0 24px;"><i class="icon-long-arrow-right"></i></div>';
 
             html += '<div style="min-width: 250px;">';
-            html += '<select name="zone_map[' + source.id_zone + ']" class="ps-input" style="height: 36px; padding: 4px 8px;">';
+            html += '<select name="zone_map[' + sourceId + ']" class="ps-input" style="height: 36px; padding: 4px 8px;">';
             html += '<option value="">-- skip --</option>';
             var found = false;
             $.each(localZones, function (j, local) {
+                var localName = String(local.name == null ? '' : local.name);
                 var selected = "";
-                if (!found && local.name.toLowerCase().trim() == source.name.toLowerCase().trim()) {
+                if (!found && localName.toLowerCase().trim() == sourceName.toLowerCase().trim()) {
                     selected = "selected"; found = true;
                 }
-                html += '<option value="' + local.id_zone + '" ' + selected + '>' + local.name + '</option>';
+                html += '<option value="' + PrestaShift.escapeHtml(local.id_zone) + '" ' + selected + '>' + PrestaShift.escapeHtml(localName) + '</option>';
             });
             html += '</select></div></div>';
         });
@@ -567,7 +570,7 @@ var PrestaShift = {
         html += '</div>';
         html += '<ul style="margin:0; padding-left:1.2rem; color:#78350f; font-size:0.875rem;">';
         $.each(PrestaShift.versionWarnings, function (i, w) {
-            html += '<li style="margin-bottom:4px;">' + w + '</li>';
+            html += '<li style="margin-bottom:4px;">' + PrestaShift.escapeHtml(w) + '</li>';
         });
         html += '</ul></div>';
         $('#scope-form').before(html);
@@ -618,7 +621,7 @@ var PrestaShift = {
                 if (response.success) {
                     PrestaShift.renderStatusTable(response.source_statuses, response.local_statuses);
                 } else {
-                    $('#status-mapping-table-container').html('<div class="alert alert-danger">' + response.message + '</div>');
+                    $('#status-mapping-table-container').html('<div class="alert alert-danger">' + PrestaShift.escapeHtml(response.message) + '</div>');
                 }
             },
             error: function (jqXHR, textStatus) {
@@ -630,12 +633,14 @@ var PrestaShift = {
     renderStatusTable: function (sourceConfigs, localStatuses) {
         var html = '<div class="ps-space-y-2">';
         $.each(sourceConfigs, function (i, source) {
+            var sourceName = String(source.name == null ? '' : source.name);
+            var sourceId = PrestaShift.escapeHtml(source.id_order_state);
             html += '<div class="ps-flex-between ps-p-3 ps-border ps-border-slate-200 ps-rounded-md ps-bg-slate-50">';
 
             // Name Column: flex: 1 to push arrow/select to the right
             html += '<div class="ps-flex-start ps-gap-2" style="flex: 1;">';
-            html += '<span class="ps-font-medium ps-text-slate-700">' + source.name + '</span>';
-            html += '<span class="ps-text-xs ps-text-slate-400">(' + source.id_order_state + ')</span>';
+            html += '<span class="ps-font-medium ps-text-slate-700">' + PrestaShift.escapeHtml(sourceName) + '</span>';
+            html += '<span class="ps-text-xs ps-text-slate-400">(' + sourceId + ')</span>';
             html += '</div>';
 
             // Arrow: Padding to avoid sticking
@@ -643,14 +648,15 @@ var PrestaShift = {
 
             // Select: Fixed min-width
             html += '<div style="min-width: 250px;">';
-            html += '<select name="status_map[' + source.id_order_state + ']" class="ps-input" style="height: 36px; padding: 4px 8px;">';
+            html += '<select name="status_map[' + sourceId + ']" class="ps-input" style="height: 36px; padding: 4px 8px;">';
             var found = false;
             $.each(localStatuses, function (j, local) {
+                var localName = String(local.name == null ? '' : local.name);
                 var selected = "";
-                if (!found && local.name.toLowerCase().trim() == source.name.toLowerCase().trim()) {
+                if (!found && localName.toLowerCase().trim() == sourceName.toLowerCase().trim()) {
                     selected = "selected"; found = true;
                 }
-                html += '<option value="' + local.id_order_state + '" ' + selected + '>' + local.name + '</option>';
+                html += '<option value="' + PrestaShift.escapeHtml(local.id_order_state) + '" ' + selected + '>' + PrestaShift.escapeHtml(localName) + '</option>';
             });
             html += '</select></div></div>';
         });
@@ -837,7 +843,9 @@ var PrestaShift = {
     // the source host) shows as readable text instead of rendering as markup —
     // which produced huge, dark, near-invisible text on the dark terminal.
     escapeHtml: function (s) {
-        return $('<div>').text(s == null ? '' : String(s)).html();
+        return $('<div>').text(s == null ? '' : String(s)).html()
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     },
 
     // Log an error line: escaped (never rendered as HTML) and coloured so it
