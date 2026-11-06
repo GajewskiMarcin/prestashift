@@ -11,7 +11,9 @@
 namespace PrestaShift\Service\Steps;
 
 use PDO;
+use PrestaShift\Service\DownloadPathResolver;
 use PrestaShift\Service\IdMapper;
+use PrestaShift\Service\LogService;
 use PrestaShift\Service\SchemaHelper;
 
 class ProductDownloadMigrationStep
@@ -62,14 +64,23 @@ class ProductDownloadMigrationStep
         // Files are stored under a hash name, not an id
         if (!$this->skip_files && !empty($data['filename'])) {
             try {
+                if (!defined('_PS_DOWNLOAD_DIR_')) {
+                    define('_PS_DOWNLOAD_DIR_', _PS_ROOT_DIR_ . '/download/');
+                }
+                $targetPath = DownloadPathResolver::resolve(_PS_DOWNLOAD_DIR_, $data['filename']);
+                if ($targetPath === false) {
+                    LogService::getInstance()->warning('Skipped a virtual product file because its destination path is unsafe.');
+                    return;
+                }
+
                 $sourceFile = $this->db_connection->getFile('download/' . $data['filename']);
                 if ($sourceFile) {
-                    if (!defined('_PS_DOWNLOAD_DIR_')) {
-                        define('_PS_DOWNLOAD_DIR_', _PS_ROOT_DIR_ . '/download/');
+                    if (@file_put_contents($targetPath, $sourceFile) === false) {
+                        LogService::getInstance()->warning('Could not write a virtual product file to the download directory.');
                     }
-                    @file_put_contents(_PS_DOWNLOAD_DIR_ . $data['filename'], $sourceFile);
                 }
             } catch (\Exception $e) {
+                LogService::getInstance()->warning('Could not fetch a virtual product file from the source shop.');
             }
         }
     }

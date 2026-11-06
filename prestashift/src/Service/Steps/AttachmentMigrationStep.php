@@ -13,6 +13,7 @@ namespace PrestaShift\Service\Steps;
 use Db;
 use PDO;
 use PrestaShift\Service\ConnectorClient;
+use PrestaShift\Service\DownloadPathResolver;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LogService;
 use PrestaShift\Service\LanguageMapper;
@@ -118,7 +119,12 @@ class AttachmentMigrationStep
      */
     private function downloadFile($fileHash, $expectedSize = 0)
     {
-        $targetPath = constant('_PS_DOWNLOAD_DIR_') . $fileHash;
+        $targetPath = DownloadPathResolver::resolve(constant('_PS_DOWNLOAD_DIR_'), $fileHash);
+        if ($targetPath === false) {
+            LogService::getInstance()->warning('Skipped an attachment file because its destination path is unsafe.');
+            return;
+        }
+
         // A file that is already there and the right size needs no fetching.
         // One of the wrong size does: that is how a shop repairs itself after a
         // run that saved a 403 page over its attachments, which "skip whatever

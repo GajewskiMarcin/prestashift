@@ -12,6 +12,7 @@ namespace PrestaShift\Service\Steps;
 
 use Db;
 use PDO;
+use PrestaShift\Service\DownloadPathResolver;
 use PrestaShift\Service\IdMapper;
 use PrestaShift\Service\LanguageMapper;
 use PrestaShift\Service\SchemaHelper;
@@ -169,13 +170,28 @@ class CmsMigrationStep
         if (!is_dir($cmsImgDir)) {
             @mkdir($cmsImgDir, 0755, true);
         }
+        $imageRoot = realpath(_PS_IMG_DIR_);
+        $cmsRoot = realpath($cmsImgDir);
+        if ($imageRoot === false || $cmsRoot === false
+            || is_link(rtrim($cmsImgDir, '/\\'))
+            || strpos($cmsRoot, $imageRoot . DIRECTORY_SEPARATOR) !== 0) {
+            return;
+        }
 
         foreach (array_keys($files) as $filename) {
-            $targetPath = $cmsImgDir . $filename;
+            $targetPath = DownloadPathResolver::resolveRelativePath($cmsImgDir, $filename);
+            if ($targetPath === false) {
+                continue;
+            }
 
             $dir = dirname($targetPath);
             if (!is_dir($dir)) {
                 @mkdir($dir, 0755, true);
+            }
+
+            $targetPath = DownloadPathResolver::resolveRelativePath($cmsImgDir, $filename);
+            if ($targetPath === false) {
+                continue;
             }
 
             if (file_exists($targetPath)) {
