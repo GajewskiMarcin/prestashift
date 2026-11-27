@@ -105,7 +105,7 @@ the only code path that sends anything to the author. The module's other outboun
 
 - [Report issues](https://github.com/GajewskiMarcin/prestashift/issues)
 - [Discussions](https://github.com/GajewskiMarcin/prestashift/discussions)
-- [Support on Ko-fi](https://ko-fi.com/quenceproject)
+- [Support on Ko-fi](https://ko-fi.com/quinceproject)
 
 ## Author
 
@@ -122,7 +122,7 @@ every derivative work to retain it:
 
 > PrestaShift was created by Marcin Gajewski — https://marcingajewski.pl
 > Original project: https://github.com/GajewskiMarcin/prestashift
-> Support the work: https://ko-fi.com/quenceproject
+> Support the work: https://ko-fi.com/quinceproject
 >
 > Derivative works and forks must keep this notice, the author credit, and the support link shown
 > on the module's final screen. "PrestaShift" is the name of the original module: if you publish a
