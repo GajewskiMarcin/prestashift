@@ -12,7 +12,7 @@
  *
  * PrestaShift was created by Marcin Gajewski — https://marcingajewski.pl
  * Original project: https://github.com/GajewskiMarcin/prestashift
- * Support the work: https://buymeacoffee.com/marcingajewski
+ * Support the work: https://ko-fi.com/quenceproject
  *
  * Derivative works and forks must keep this notice, the author credit, and the
  * support link shown on the module's final screen. "PrestaShift" is the name of
