@@ -5,7 +5,7 @@
  * @author    marcingajewski.pl <kontakt@marcingajewski.pl>
  * @copyright 2026 marcingajewski.pl
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License 3.0 (AFL-3.0)
- * @version   1.3.0
+ * @version   1.3.1
  */
 
 // Prevent PrestaShop from redirecting based on domain mismatch
@@ -16,6 +16,7 @@ if (!defined('_PS_ADMIN_DIR_')) {
 ob_start();
 require_once(dirname(__FILE__) . '/../../config/config.inc.php');
 ob_end_clean();
+require_once(dirname(__FILE__) . '/sqlguard.php');
 
 // Override any redirect that PS core may have queued
 header_remove('Location');
@@ -40,7 +41,7 @@ try {
         header('Content-Type: application/json');
         echo json_encode([
             'success' => true,
-            'version' => '1.3.0',
+            'version' => '1.3.1',
             'ps_version' => _PS_VERSION_,
             'php_version' => PHP_VERSION,
             'prefix' => _DB_PREFIX_,
@@ -84,26 +85,12 @@ try {
         // token was therefore worth far more than read access.
         //
         // So: one statement, it must be a SELECT, and the handful of SELECT
-        // constructs that touch files, locks or the clock are refused.
-        $candidate = ltrim($sql);
-        // Comments first, so /* */ or -- cannot hide the real first word.
-        do {
-            $before = $candidate;
-            $candidate = preg_replace('#^/\*.*?\*/#s', '', $candidate);
-            $candidate = preg_replace('#^(--[^\n]*|\#[^\n]*)(\n|$)#', '', $candidate);
-            $candidate = ltrim($candidate);
-        } while ($candidate !== $before);
-
-        if (!preg_match('/^SELECT\b/i', $candidate)) {
-            throw new Exception('Only SELECT queries are allowed. The connector is read-only.');
-        }
-        if (strpos(rtrim($sql, "; \t\r\n"), ';') !== false) {
-            throw new Exception('Only one statement per request is allowed.');
-        }
-        if (preg_match('/\binto\s+(outfile|dumpfile)\b/i', $sql)
-            || preg_match('/\b(load_file|benchmark|sleep|get_lock|release_lock)\s*\(/i', $sql)) {
-            throw new Exception('This query uses a construct the connector does not allow.');
-        }
+        // constructs that touch files, locks or the clock are refused. The
+        // checks run on the query as MySQL reads it (sqlguard.php), because on
+        // the raw text a comment or backticks hid those constructs. How a
+        // backslash inside a string is read depends on the server's sql_mode.
+        $sqlMode = (string) Db::getInstance()->getValue('SELECT @@SESSION.sql_mode');
+        psconnector_assert_read_only($sql, stripos($sqlMode, 'NO_BACKSLASH_ESCAPES') === false);
 
         $results = Db::getInstance()->executeS($sql);
 
