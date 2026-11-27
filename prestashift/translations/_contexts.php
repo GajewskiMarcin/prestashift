@@ -10,6 +10,7 @@
  */
 return array(
     ', Offset:' => array('adminprestashiftmigrationcontroller'),
+    'Abandoned Carts' => array('scope'),
     'Accounts, Groups, Addresses' => array('scope'),
     'Accounts, Passwords, Addresses' => array('scope'),
     'Addresses done. Starting categories...' => array('migrationmanager'),
@@ -38,6 +39,7 @@ return array(
     'Carriers done. Starting orders...' => array('migrationmanager'),
     'Cart Rules' => array('adminprestashiftmigrationcontroller'),
     'Carts done. Starting wishlists...' => array('migrationmanager'),
+    'Carts that never became an order. Untick on shops with thousands of them.' => array('scope'),
     'Catalog' => array('scope'),
     'Categories' => array('adminprestashiftmigrationcontroller'),
     'Categories done. Starting tax rules...' => array('migrationmanager'),
@@ -150,6 +152,7 @@ return array(
     'Messages done. Starting carriers...' => array('migrationmanager'),
     'Meta done. Starting images...' => array('migrationmanager'),
     'Migrating CMS content (Offset: %d)...' => array('migrationmanager'),
+    'Migrating abandoned carts (Offset: %d)...' => array('migrationmanager'),
     'Migrating addresses (Offset: %d)...' => array('migrationmanager'),
     'Migrating attachments (Offset: %d)...' => array('migrationmanager'),
     'Migrating attribute groups (Offset: %d)...' => array('migrationmanager'),

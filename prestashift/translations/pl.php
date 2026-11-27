@@ -415,6 +415,10 @@ $translations = array(
     'Rewrite rules regenerated for friendly URLs' => 'Reguły przepisywania adresów odświeżone dla przyjaznych adresów',
     'Rewrite rules regeneration failed — turn friendly URLs off and on again in Shop Parameters > Traffic & SEO' => 'Nie udało się odświeżyć reguł przepisywania adresów — wyłącz i włącz ponownie przyjazne adresy w Parametry sklepu > Ruch i SEO',
     'The source is a multistore installation with %1$d shops. Only the data of shop "%2$s" (id %3$d) will be migrated — the other shops are ignored.' => 'Stary sklep działa w trybie wielosklepowym i ma %1$d sklepów. Przeniesione zostaną wyłącznie dane sklepu „%2$s” (id %3$d) — pozostałe sklepy zostaną pominięte.',
+    // === Abandoned carts switch ===
+    'Abandoned Carts' => 'Porzucone koszyki',
+    'Carts that never became an order. Untick on shops with thousands of them.' => 'Koszyki, z których nigdy nie powstało zamówienie. Odznacz w sklepach, które mają ich tysiące.',
+    'Migrating abandoned carts (Offset: %d)...' => 'Migrowanie porzuconych koszyków (Offset: %d)...',
 );
 
 // Map of Phrases to Contexts (Generated from Scan)
