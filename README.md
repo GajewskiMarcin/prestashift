@@ -107,6 +107,10 @@ the only code path that sends anything to the author. The module's other outboun
 - [Discussions](https://github.com/GajewskiMarcin/prestashift/discussions)
 - [Support on Ko-fi](https://ko-fi.com/quinceproject)
 
+### From the same author
+
+**[Quince Project](https://github.com/quinceproject)**: a theme and engine for PrestaShop with over 20 modules, to freely manage the look and content of your shop and support back-office processes.
+
 ## Author
 
 Created by [marcingajewski.pl](https://marcingajewski.pl)

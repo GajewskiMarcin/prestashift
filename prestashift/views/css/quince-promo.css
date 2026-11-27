@@ -1,0 +1,158 @@
+/*
+ * Quince Project block on the Support page.
+ * Look of the project website header (quinceproject.github.io): pastel glow,
+ * slanted beams, the "Quince Project" wordmark in a gradient (Instrument Sans,
+ * OFL, see views/fonts/OFL-instrument-sans.txt), a square button and a row of facts.
+ * The same file is shipped in every module of the author that shows this block.
+ */
+@font-face {
+    font-family: 'Quince Instrument Sans';
+    font-weight: 400 600;
+    font-display: swap;
+    src: url('../fonts/instrument-sans-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+    font-family: 'Quince Instrument Sans';
+    font-weight: 400 600;
+    font-display: swap;
+    src: url('../fonts/instrument-sans-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+.quince-promo {
+    container-type: inline-size;
+    position: relative;
+    overflow: hidden;
+    margin-top: 16px;
+    border-radius: 12px;
+    background: #f3f5f8;
+    color: #161b28;
+    text-align: left;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Module admin styles often force their own font on every element. */
+.quince-promo,
+.quince-promo * {
+    font-family: 'Quince Instrument Sans', Arial, sans-serif !important;
+}
+
+.quince-promo-wash {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        radial-gradient(60% 70% at 8% 10%, rgba(255, 197, 107, .55), transparent 70%),
+        radial-gradient(45% 60% at 62% 0%, rgba(184, 174, 246, .55), transparent 70%),
+        radial-gradient(50% 70% at 100% 20%, rgba(143, 211, 247, .6), transparent 70%);
+}
+
+.quince-promo-beam {
+    position: absolute;
+    top: -10%;
+    width: 150px;
+    height: 80%;
+    background: rgba(255, 255, 255, .35);
+    transform: skewY(-18deg);
+    pointer-events: none;
+}
+
+.quince-promo-beam.b1 { left: 6%; }
+.quince-promo-beam.b2 { left: 24%; width: 90px; background: rgba(255, 255, 255, .25); }
+.quince-promo-beam.b3 { left: 58%; width: 120px; }
+.quince-promo-beam.b4 { left: 78%; width: 60px; background: rgba(255, 255, 255, .3); }
+
+.quince-promo-in {
+    position: relative;
+    padding: 44px 56px 0;
+}
+
+.quince-promo .quince-promo-lead {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 400;
+    line-height: 1.45;
+    color: #161b28;
+}
+
+/* Bottom padding: the gradient fills only the text box, and the tail of "j" went outside it. */
+.quince-promo .quince-promo-word {
+    display: inline-block;
+    margin: 10px 0 -.22em;
+    padding: 0 .04em .22em 0;
+    /* One line at any column width: 96 px when there is room, smaller in narrow columns. */
+    font-size: clamp(40px, 12cqi, 96px);
+    white-space: nowrap;
+    font-weight: 500;
+    line-height: .9;
+    letter-spacing: -.06em;
+    background: linear-gradient(90deg, #ffc56b 0%, #b8aef6 55%, #8fd3f7 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.quince-promo .quince-promo-text {
+    margin: 28px 0 0;
+    max-width: 36rem;
+    font-size: 19px;
+    font-weight: 400;
+    line-height: 1.5;
+    color: #161b28;
+}
+
+.quince-promo-cta {
+    margin-top: 36px;
+}
+
+.quince-promo a.quince-promo-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    height: 54px;
+    padding: 0 28px;
+    border: 0;
+    border-radius: 0;
+    font-size: 16px;
+    font-weight: 500;
+    text-decoration: none;
+    background: #1f2533;
+    color: #fff;
+    transition: background .15s;
+}
+
+.quince-promo a.quince-promo-btn:hover,
+.quince-promo a.quince-promo-btn:focus {
+    background: #0b1730;
+    color: #fff;
+    text-decoration: none;
+}
+
+.quince-promo-btn svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+}
+
+.quince-promo-facts {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+    margin-top: 56px;
+    padding: 24px 0 32px;
+    border-top: 1px solid rgba(22, 27, 40, .15);
+}
+
+.quince-promo-facts b {
+    display: block;
+    font-size: 17px;
+    font-weight: 500;
+    color: #161b28;
+}
+
+@media (max-width: 767px) {
+    .quince-promo-in { padding: 32px 24px 0; }
+    .quince-promo-facts { grid-template-columns: 1fr; gap: 12px; }
+}

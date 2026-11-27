@@ -325,7 +325,12 @@ $translations = array(
     'Counting records...' => 'Zliczanie rekordów...',
     'Support the Project' => 'Wesprzyj projekt',
     'If you find PrestaShift useful, consider supporting development' => 'Jeśli PrestaShift okazał się przydatny, rozważ wsparcie rozwoju',
-    'Buy me a coffee' => 'Postaw mi kawę',
+    'Support on Ko-fi' => 'Wesprzyj na Ko-fi',
+    'Discover the theme and engine for PrestaShop' => 'Poznaj motyw i silnik do PrestaShop',
+    'A set of over 20 modules and a theme that let you freely manage the look and content of your shop and support back-office processes.' => 'Zestaw ponad 20 modułów i motyw, pozwalających na swobodne zarządzanie wyglądem i treściami w sklepie oraz wspierających procesy backendowe.',
+    'Download for free from GitHub' => 'Pobierz za darmo z GitHub',
+    'PHP 8.1 or newer' => 'PHP 8.1 lub nowszy',
+    'OSL-3.0 licence' => 'Licencja OSL-3.0',
     'Star on GitHub' => 'Zostaw gwiazdkę na GitHubie',
     'Questions? Visit Discussions' => 'Pytania? Zajrzyj do Dyskusji',
 

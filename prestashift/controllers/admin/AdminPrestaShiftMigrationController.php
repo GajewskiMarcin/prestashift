@@ -123,6 +123,8 @@ class AdminPrestaShiftMigrationController extends ModuleAdminController
         parent::setMedia($isNewTheme);
         $time = time(); // Force cache bust
         $this->addCSS($this->module->getPathUri() . 'views/css/admin.css?v=' . $time);
+        // Quince Project block on the last step (views/css/quince-promo.css)
+        $this->addCSS($this->module->getPathUri() . 'views/css/quince-promo.css?v=' . $time);
         $this->addJS($this->module->getPathUri() . 'views/js/admin.js?v=' . $time);
     }
 
