@@ -761,10 +761,10 @@ class MigrationManager
                     $result['finished'] = true;
                 }
                 if ($result['finished']) {
-                    // Skipped carts were not read: a later incremental run with the switch on must read them all
-                    if (!$skipped) {
-                        $this->updateSyncHistory('abandoned_carts', date('Y-m-d H:i:s'));
-                    }
+                    // Skipped carts were not read, and "Clean target data" may have
+                    // removed the ones an earlier run copied: forget the date, so a
+                    // later incremental run with the switch on reads them all.
+                    $this->updateSyncHistory('abandoned_carts', $skipped ? null : date('Y-m-d H:i:s'));
                     $state['current_task'] = 'wishlist';
                     $state['offset'] = 0;
                     $message = $this->l('Carts done. Starting wishlists...');
